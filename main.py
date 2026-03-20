@@ -1,6 +1,7 @@
 import requests
 import os
 import time
+from datetime import datetime
 
 print("🚀 VERSAO NOVA RODANDO")
 
@@ -38,13 +39,13 @@ headers = {
 pagina = 1
 total_baixadas = 0
 
-# 👇 reduzido pra teste rápido
-MAX_PAGINAS = 2
+# 🚀 Limite alto pra pegar tudo
+MAX_PAGINAS = 50
 
 while pagina <= MAX_PAGINAS:
     print(f"\n📄 Buscando página {pagina}...")
 
-    url = f"{BASE_URL}/contas/receber?page={pagina}&limite=10"
+    url = f"{BASE_URL}/contas/receber?page={pagina}&limite=100"
     response = requests.get(url, headers=headers)
 
     if response.status_code != 200:
@@ -52,37 +53,38 @@ while pagina <= MAX_PAGINAS:
         break
 
     data = response.json()
-
-    print("🔍 RESPOSTA API:")
-    print(data)
-
     contas = data.get("data", [])
 
-    print("📊 Total contas retornadas:", len(contas))
+    print(f"📊 {len(contas)} contas encontradas")
 
     if not contas:
-        print("❌ Nenhuma conta retornada pela API")
+        print("✅ Sem mais contas")
         break
 
     for conta in contas:
         try:
-            print("\n📌 CONTA COMPLETA:")
-            print(conta)
-
             conta_id = conta.get("id")
+            situacao = conta.get("situacao", {}).get("descricao", "")
+            valor = conta.get("valor", 0)
+
+            print(f"🔎 Conta {conta_id} - Situação: {situacao} - Valor: {valor}")
+
+            # 🔥 FILTRO: SOMENTE ATRASADAS
+            if "Atrasad" not in situacao:
+                continue
 
             print(f"💰 Tentando baixar conta {conta_id}")
 
             baixa_url = f"{BASE_URL}/contas/receber/{conta_id}/baixar"
 
             payload = {
-                "valor": conta.get("valor", 0),
-                "data": time.strftime("%Y-%m-%d")
+                "valor": valor,
+                "data": datetime.now().strftime("%Y-%m-%d")
             }
 
             baixa = requests.post(baixa_url, json=payload, headers=headers)
 
-            print("📥 RESPOSTA BAIXA:", baixa.status_code, baixa.text)
+            print("📥 RESPOSTA:", baixa.status_code, baixa.text)
 
             if baixa.status_code in [200, 201]:
                 print(f"✅ BAIXOU: {conta_id}")
@@ -90,7 +92,7 @@ while pagina <= MAX_PAGINAS:
             else:
                 print(f"⚠️ NÃO BAIXOU: {conta_id}")
 
-            time.sleep(0.5)
+            time.sleep(0.3)
 
         except Exception as e:
             print("⚠️ ERRO:", e)
