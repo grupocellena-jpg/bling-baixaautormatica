@@ -1,102 +1,108 @@
 import requests
+import os
 from datetime import datetime
 import time
-import os
 
-print("🤖 ROBÔ INICIADO")
-
+# 🔐 VEM DO GITHUB SECRETS
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
 
-# 🔁 GERAR NOVO ACCESS TOKEN
-token_url = "https://www.bling.com.br/Api/v3/oauth/token"
+BASE_URL = "https://www.bling.com.br/Api/v3"
 
-token_data = {
-    "grant_type": "refresh_token",
-    "refresh_token": REFRESH_TOKEN
-}
+# 🔄 GERAR ACCESS TOKEN
+def gerar_token():
+    url = "https://www.bling.com.br/Api/v3/oauth/token"
 
-response = requests.post(token_url, data=token_data, auth=(CLIENT_ID, CLIENT_SECRET))
-token_json = response.json()
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": REFRESH_TOKEN
+    }
 
-access_token = token_json.get("access_token")
+    response = requests.post(url, data=data, auth=(CLIENT_ID, CLIENT_SECRET))
+    resp_json = response.json()
+
+    access_token = resp_json.get("access_token")
+
+    if not access_token:
+        print("❌ Erro ao gerar token:", resp_json)
+        exit()
+
+    return access_token
+
+
+# 🚀 INÍCIO
+print("🤖 ROBÔ DE BAIXA INICIADO")
+
+token = gerar_token()
 
 headers = {
-    "Authorization": f"Bearer {access_token}",
-    "Content-Type": "application/json"
+    "Authorization": f"Bearer {token}"
 }
 
-BASE_URL = "https://api.bling.com.br/Api/v3"
+hoje = datetime.today().date()
 
 pagina = 1
 total_baixadas = 0
 
 while True:
-    print(f"\n📄 Página {pagina}")
+    print(f"\n📄 Buscando página {pagina}...")
 
     url = f"{BASE_URL}/contas/receber?page={pagina}"
 
-    r = requests.get(url, headers=headers)
-    data = r.json()
+    response = requests.get(url, headers=headers)
 
-    contas = data.get("data", [])
-
-    if not contas:
+    if response.status_code != 200:
+        print("❌ Erro ao buscar contas:", response.text)
         break
 
-    hoje = datetime.today().date()
+    dados = response.json()
+    contas = dados.get("data", [])
+
+    if not contas:
+        print("✅ Fim das páginas")
+        break
 
     for conta in contas:
         try:
             id_conta = conta.get("id")
-            vencimento = conta.get("dataVencimento")
+            vencimento = conta.get("vencimento")
+            valor = conta.get("valor", 0)
 
-            if not vencimento:
+            cliente = conta.get("contato", {})
+            tipo_pessoa = cliente.get("tipoPessoa")  # F = Física, J = Jurídica
+
+            # ❌ IGNORA PJ
+            if tipo_pessoa != "F":
                 continue
 
-            # 🔍 PEGAR CLIENTE
-            contato = conta.get("contato", {})
-
-            cpf = contato.get("cpf")
-            cnpj = contato.get("cnpj")
-
-            # ❌ IGNORA PESSOA JURÍDICA
-            if cnpj:
-                print(f"🏢 Ignorado PJ: {id_conta}")
-                continue
-
-            # ❌ IGNORA SEM CPF
-            if not cpf:
-                print(f"⚠️ Sem CPF: {id_conta}")
-                continue
-
-            # 📅 VERIFICA VENCIMENTO
+            # 📅 DATA
             venc_data = datetime.strptime(vencimento, "%Y-%m-%d").date()
 
+            # 🔥 REGRA: TODAS VENCIDAS
             if venc_data <= hoje:
-                print(f"💰 Baixando PF {id_conta}")
+                print(f"💰 Baixando PF {id_conta} | Venc: {vencimento}")
 
                 url_baixa = f"{BASE_URL}/contas/receber/{id_conta}/baixar"
 
                 payload = {
-                    "data": hoje.strftime('%Y-%m-%d'),
-                    "valor": conta.get("valor", 0)
+                    "data": hoje.strftime("%Y-%m-%d"),
+                    "valor": valor
                 }
 
-                r2 = requests.post(url_baixa, json=payload, headers=headers)
+                r = requests.post(url_baixa, json=payload, headers=headers)
 
-                if r2.status_code == 200:
-                    total_baixadas += 1
+                if r.status_code == 200:
                     print("✅ OK")
+                    total_baixadas += 1
                 else:
-                    print("❌ Erro:", r2.text)
+                    print("❌ Erro:", r.text)
 
                 time.sleep(0.2)
 
         except Exception as e:
-            print("Erro:", e)
+            print("⚠️ Erro na conta:", e)
 
     pagina += 1
 
-print(f"\n🏁 FINALIZADO - {total_baixadas} contas baixadas (somente PF)")
+print(f"\n🏁 FINALIZADO | Total baixadas: {total_baixadas}")
