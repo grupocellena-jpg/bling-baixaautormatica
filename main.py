@@ -11,7 +11,7 @@ BASE_URL = "https://www.bling.com.br/Api/v3"
 
 print("🤖 ROBÔ DE BAIXA INICIADO")
 
-# 🔄 GERAR ACCESS TOKEN
+# 🔄 GERAR TOKEN
 def gerar_token():
     url = f"{BASE_URL}/oauth/token"
 
@@ -36,13 +36,11 @@ headers = {
 }
 
 pagina = 1
-total_baixadas = 0
 
 while True:
     print(f"\n📄 Buscando página {pagina}...")
 
     url = f"{BASE_URL}/contas/receber?page={pagina}&limite=100"
-
     response = requests.get(url, headers=headers)
 
     if response.status_code != 200:
@@ -52,50 +50,25 @@ while True:
     data = response.json()
     contas = data.get("data", [])
 
-    # 🛑 PARADA
+    # 🛑 PARA SE ACABAR
     if not contas:
         print("\n✅ Fim das páginas.")
         break
 
     for conta in contas:
-        try:
-            cliente = conta.get("contato", {})
-            tipo = cliente.get("tipoPessoa")
-            situacao = conta.get("situacao")
+        print("\n==============================")
+        print("🔍 DEBUG CONTA COMPLETA:")
+        print(conta)
 
-            # 🎯 FILTRO PF
-            if tipo != "F":
-                continue
+        cliente = conta.get("contato", {})
+        tipo = cliente.get("tipoPessoa")
+        situacao = conta.get("situacao")
 
-            # 🎯 FILTRO ATRASADO
-            if situacao != "ATRASADO":
-                continue
+        print("👉 tipoPessoa:", tipo)
+        print("👉 situacao:", situacao)
 
-            conta_id = conta.get("id")
+        # 🚨 PARA AQUI PRA ANALISAR
+        break
 
-            print(f"💰 Baixando conta {conta_id}")
-
-            # 🔻 DAR BAIXA
-            baixa_url = f"{BASE_URL}/contas/receber/{conta_id}/baixar"
-
-            payload = {
-                "valor": conta.get("valor"),
-                "data": time.strftime("%Y-%m-%d")
-            }
-
-            baixa = requests.post(baixa_url, json=payload, headers=headers)
-
-            if baixa.status_code in [200, 201]:
-                print(f"✅ Baixado com sucesso: {conta_id}")
-                total_baixadas += 1
-            else:
-                print(f"⚠️ Erro ao baixar {conta_id}: {baixa.text}")
-
-            time.sleep(0.2)
-
-        except Exception as e:
-            print("⚠️ Erro na conta:", e)
-
-    pagina += 1
-
-print(f"\n🏁 Finalizado. Total baixadas: {total_baixadas}")
+    # 🚨 PARA SÓ NA PRIMEIRA PÁGINA
+    break
