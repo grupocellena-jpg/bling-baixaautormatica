@@ -3,22 +3,36 @@ import os
 import time
 from datetime import datetime
 
-print("🚀 VERSAO NOVA RODANDO")
+print("🔥 USANDO ARQUIVO LOCAL")
 
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
 
 BASE_URL = "https://www.bling.com.br/Api/v3"
 
-print("🤖 ROBÔ DE BAIXA INICIADO")
+
+# =========================
+# TOKEN (AUTOMÁTICO)
+# =========================
+
+def ler_refresh_token():
+    with open("refresh_token.txt", "r") as f:
+        return f.read().strip()
+
+
+def salvar_refresh_token(token):
+    with open("refresh_token.txt", "w") as f:
+        f.write(token)
+
 
 def gerar_token():
+    refresh_token = ler_refresh_token()
+
     url = f"{BASE_URL}/oauth/token"
 
     data = {
         "grant_type": "refresh_token",
-        "refresh_token": REFRESH_TOKEN
+        "refresh_token": refresh_token
     }
 
     response = requests.post(url, data=data, auth=(CLIENT_ID, CLIENT_SECRET))
@@ -28,7 +42,18 @@ def gerar_token():
         print("❌ Erro ao gerar token:", resp_json)
         exit()
 
+    novo_refresh = resp_json.get("refresh_token")
+
+    if novo_refresh:
+        print("🔄 Atualizando refresh_token automaticamente")
+        salvar_refresh_token(novo_refresh)
+
     return resp_json["access_token"]
+
+
+# =========================
+# EXECUÇÃO
+# =========================
 
 access_token = gerar_token()
 
@@ -39,23 +64,18 @@ headers = {
 pagina = 1
 total_baixadas = 0
 
-# 🚀 Limite alto pra pegar tudo
-MAX_PAGINAS = 50
-
-while pagina <= MAX_PAGINAS:
-    print(f"\n📄 Buscando página {pagina}...")
+while True:
+    print(f"\n📄 Página {pagina}")
 
     url = f"{BASE_URL}/contas/receber?page={pagina}&limite=100"
     response = requests.get(url, headers=headers)
 
     if response.status_code != 200:
-        print("❌ Erro:", response.text)
+        print("❌ Erro ao buscar contas:", response.text)
         break
 
     data = response.json()
     contas = data.get("data", [])
-
-    print(f"📊 {len(contas)} contas encontradas")
 
     if not contas:
         print("✅ Sem mais contas")
@@ -67,13 +87,13 @@ while pagina <= MAX_PAGINAS:
             situacao = conta.get("situacao", {}).get("descricao", "")
             valor = conta.get("valor", 0)
 
-            print(f"🔎 Conta {conta_id} - Situação: {situacao} - Valor: {valor}")
+            print(f"🔎 Conta {conta_id} - {situacao} - R$ {valor}")
 
-            # 🔥 FILTRO: SOMENTE ATRASADAS
+            # 🔥 SOMENTE ATRASADAS
             if "Atrasad" not in situacao:
                 continue
 
-            print(f"💰 Tentando baixar conta {conta_id}")
+            print(f"💰 Baixando {conta_id}")
 
             baixa_url = f"{BASE_URL}/contas/receber/{conta_id}/baixar"
 
@@ -87,10 +107,10 @@ while pagina <= MAX_PAGINAS:
             print("📥 RESPOSTA:", baixa.status_code, baixa.text)
 
             if baixa.status_code in [200, 201]:
-                print(f"✅ BAIXOU: {conta_id}")
+                print(f"✅ BAIXADO {conta_id}")
                 total_baixadas += 1
             else:
-                print(f"⚠️ NÃO BAIXOU: {conta_id}")
+                print(f"⚠️ NÃO BAIXOU {conta_id}")
 
             time.sleep(0.3)
 
