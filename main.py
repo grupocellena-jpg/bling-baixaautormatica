@@ -1,18 +1,19 @@
 import requests
 import os
-from datetime import datetime
 import time
 
-# 🔐 VEM DO GITHUB SECRETS
+# 🔐 Dados do GitHub Secrets
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
 
 BASE_URL = "https://www.bling.com.br/Api/v3"
 
+print("🤖 ROBÔ DE BAIXA INICIADO")
+
 # 🔄 GERAR ACCESS TOKEN
 def gerar_token():
-    url = "https://www.bling.com.br/Api/v3/oauth/token"
+    url = f"{BASE_URL}/oauth/token"
 
     data = {
         "grant_type": "refresh_token",
@@ -22,25 +23,17 @@ def gerar_token():
     response = requests.post(url, data=data, auth=(CLIENT_ID, CLIENT_SECRET))
     resp_json = response.json()
 
-    access_token = resp_json.get("access_token")
-
-    if not access_token:
+    if "access_token" not in resp_json:
         print("❌ Erro ao gerar token:", resp_json)
         exit()
 
-    return access_token
+    return resp_json["access_token"]
 
-
-# 🚀 INÍCIO
-print("🤖 ROBÔ DE BAIXA INICIADO")
-
-token = gerar_token()
+access_token = gerar_token()
 
 headers = {
-    "Authorization": f"Bearer {token}"
+    "Authorization": f"Bearer {access_token}"
 }
-
-hoje = datetime.today().date()
 
 pagina = 1
 total_baixadas = 0
@@ -48,61 +41,61 @@ total_baixadas = 0
 while True:
     print(f"\n📄 Buscando página {pagina}...")
 
-    url = f"{BASE_URL}/contas/receber?page={pagina}"
+    url = f"{BASE_URL}/contas/receber?page={pagina}&limite=100"
 
     response = requests.get(url, headers=headers)
 
     if response.status_code != 200:
-        print("❌ Erro ao buscar contas:", response.text)
+        print("❌ Erro na requisição:", response.text)
         break
 
-    dados = response.json()
-    contas = dados.get("data", [])
+    data = response.json()
+    contas = data.get("data", [])
 
+    # 🛑 PARADA
     if not contas:
-        print("✅ Fim das páginas")
+        print("\n✅ Fim das páginas.")
         break
 
     for conta in contas:
         try:
-            id_conta = conta.get("id")
-            vencimento = conta.get("vencimento")
-            valor = conta.get("valor", 0)
-
             cliente = conta.get("contato", {})
-            tipo_pessoa = cliente.get("tipoPessoa")  # F = Física, J = Jurídica
+            tipo = cliente.get("tipoPessoa")
+            situacao = conta.get("situacao")
 
-            # ❌ IGNORA PJ
-            if tipo_pessoa != "F":
+            # 🎯 FILTRO PF
+            if tipo != "F":
                 continue
 
-            # 📅 DATA
-            venc_data = datetime.strptime(vencimento, "%Y-%m-%d").date()
+            # 🎯 FILTRO ATRASADO
+            if situacao != "ATRASADO":
+                continue
 
-            # 🔥 REGRA: TODAS VENCIDAS
-            if venc_data <= hoje:
-                print(f"💰 Baixando PF {id_conta} | Venc: {vencimento}")
+            conta_id = conta.get("id")
 
-                url_baixa = f"{BASE_URL}/contas/receber/{id_conta}/baixar"
+            print(f"💰 Baixando conta {conta_id}")
 
-                payload = {
-                    "data": hoje.strftime("%Y-%m-%d"),
-                    "valor": valor
-                }
+            # 🔻 DAR BAIXA
+            baixa_url = f"{BASE_URL}/contas/receber/{conta_id}/baixar"
 
-                r = requests.post(url_baixa, json=payload, headers=headers)
+            payload = {
+                "valor": conta.get("valor"),
+                "data": time.strftime("%Y-%m-%d")
+            }
 
-                if r.status_code == 200:
-                    print("✅ OK")
-                    total_baixadas += 1
-                else:
-                    print("❌ Erro:", r.text)
+            baixa = requests.post(baixa_url, json=payload, headers=headers)
 
-                time.sleep(0.2)
+            if baixa.status_code in [200, 201]:
+                print(f"✅ Baixado com sucesso: {conta_id}")
+                total_baixadas += 1
+            else:
+                print(f"⚠️ Erro ao baixar {conta_id}: {baixa.text}")
+
+            time.sleep(0.2)
 
         except Exception as e:
             print("⚠️ Erro na conta:", e)
 
     pagina += 1
 
-print(f"\n🏁 FINALIZADO | Total baixadas: {total_baixadas}")
+print(f"\n🏁 Finalizado. Total baixadas: {total_baixadas}")
