@@ -35,9 +35,14 @@ jobs:
           CLIENT_SECRET = os.getenv("BLING_CLIENT_SECRET")
           REFRESH_TOKEN = os.getenv("BLING_REFRESH_TOKEN")
 
+          print("🔍 DEBUG VARIÁVEIS:")
+          print("CLIENT_ID:", CLIENT_ID)
+          print("CLIENT_SECRET (inicio):", CLIENT_SECRET[:5] if CLIENT_SECRET else None)
+          print("REFRESH_TOKEN:", REFRESH_TOKEN)
+
           print("🔄 Atualizando token...")
 
-          # 🔐 Monta Basic Auth corretamente
+          # 🔐 Basic Auth
           auth = f"{CLIENT_ID}:{CLIENT_SECRET}"
           auth_base64 = base64.b64encode(auth.encode()).decode()
 
@@ -51,7 +56,6 @@ jobs:
               "refresh_token": REFRESH_TOKEN
           }
 
-          # 🔁 REQUEST CORRETO (COM HEADER!)
           res = requests.post(
               "https://api.bling.com.br/Api/v3/oauth/token",
               headers=headers,
@@ -60,7 +64,7 @@ jobs:
 
           data = res.json()
 
-          print("RESPOSTA TOKEN:", data)
+          print("📡 RESPOSTA TOKEN:", data)
 
           if "access_token" not in data:
               print("❌ Erro ao atualizar token")
@@ -75,7 +79,7 @@ jobs:
               print("🔄 NOVO REFRESH TOKEN:")
               print(new_refresh_token)
 
-          # 🔐 Agora usa o access_token na API
+          # 🔐 API
           headers_api = {
               "Authorization": f"Bearer {access_token}"
           }
