@@ -1,7 +1,9 @@
-name: Robo Baixa Oficial Cellena
+name: Robo Baixa Bling
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"  # roda a cada 30 minutos
 
 jobs:
   baixa-bling:
@@ -9,12 +11,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: "3.11"
 
       - name: Instalar dependencias
         run: pip install requests
@@ -24,75 +26,100 @@ jobs:
           BLING_CLIENT_ID: ${{ secrets.BLING_CLIENT_ID }}
           BLING_CLIENT_SECRET: ${{ secrets.BLING_CLIENT_SECRET }}
           BLING_REFRESH_TOKEN: ${{ secrets.BLING_REFRESH_TOKEN }}
-
         run: |
           python - <<EOF
           import os
           import requests
-          import base64
+          from datetime import datetime
+
+          print("🔍 DEBUG VARIÁVEIS:")
+          print("CLIENT_ID:", "***" if os.getenv("BLING_CLIENT_ID") else "ERRO")
+          print("CLIENT_SECRET (inicio):", os.getenv("BLING_CLIENT_SECRET")[:5])
+          print("REFRESH_TOKEN:", "***" if os.getenv("BLING_REFRESH_TOKEN") else "ERRO")
 
           CLIENT_ID = os.getenv("BLING_CLIENT_ID")
           CLIENT_SECRET = os.getenv("BLING_CLIENT_SECRET")
           REFRESH_TOKEN = os.getenv("BLING_REFRESH_TOKEN")
 
-          print("🔍 DEBUG VARIÁVEIS:")
-          print("CLIENT_ID:", CLIENT_ID)
-          print("CLIENT_SECRET (inicio):", CLIENT_SECRET[:5] if CLIENT_SECRET else None)
-          print("REFRESH_TOKEN:", REFRESH_TOKEN)
-
           print("🔄 Atualizando token...")
 
-          # 🔐 Basic Auth
-          auth = f"{CLIENT_ID}:{CLIENT_SECRET}"
-          auth_base64 = base64.b64encode(auth.encode()).decode()
+          token_url = "https://api.bling.com.br/Api/v3/oauth/token"
 
-          headers = {
-              "Authorization": f"Basic {auth_base64}",
-              "Content-Type": "application/x-www-form-urlencoded"
-          }
-
-          payload = {
-              "grant_type": "refresh_token",
-              "refresh_token": REFRESH_TOKEN
-          }
-
-          res = requests.post(
-              "https://api.bling.com.br/Api/v3/oauth/token",
-              headers=headers,
-              data=payload
+          response = requests.post(
+              token_url,
+              auth=(CLIENT_ID, CLIENT_SECRET),
+              data={
+                  "grant_type": "refresh_token",
+                  "refresh_token": REFRESH_TOKEN
+              }
           )
 
-          data = res.json()
+          token_data = response.json()
+          print("📡 RESPOSTA TOKEN:", token_data)
 
-          print("📡 RESPOSTA TOKEN:", data)
-
-          if "access_token" not in data:
+          if "access_token" not in token_data:
               print("❌ Erro ao atualizar token")
               exit()
 
-          access_token = data["access_token"]
-          new_refresh_token = data.get("refresh_token")
+          access_token = token_data["access_token"]
+          new_refresh_token = token_data["refresh_token"]
 
           print("✅ Token atualizado")
+          print("🔄 NOVO REFRESH TOKEN:")
+          print(new_refresh_token)
 
-          if new_refresh_token:
-              print("🔄 NOVO REFRESH TOKEN:")
-              print(new_refresh_token)
-
-          # 🔐 API
-          headers_api = {
-              "Authorization": f"Bearer {access_token}"
+          headers = {
+              "Authorization": f"Bearer {access_token}",
+              "Content-Type": "application/json"
           }
 
-          print("📡 Testando API...")
+          print("📡 Buscando contas...")
 
-          r = requests.get(
-              "https://api.bling.com.br/Api/v3/contas/receber",
-              headers=headers_api
-          )
+          url_contas = "https://api.bling.com.br/Api/v3/contas/receber"
 
-          print("STATUS:", r.status_code)
-          print("RESPOSTA:", r.text)
+          res = requests.get(url_contas, headers=headers)
+          data = res.json()
+
+          print("STATUS:", res.status_code)
+
+          if "data" not in data:
+              print("❌ Erro ao buscar contas:", data)
+              exit()
+
+          print(f"📊 {len(data['data'])} contas encontradas")
+
+          hoje = datetime.now().date()
+
+          print("🔄 Iniciando baixa automática (ATRASADAS)...")
+
+          for conta in data["data"]:
+              if conta["situacao"] == 2:  # em aberto
+                  vencimento = datetime.strptime(conta["vencimento"], "%Y-%m-%d").date()
+
+                  if vencimento < hoje:
+                      conta_id = conta["id"]
+                      valor = conta["valor"]
+
+                      print(f"⏰ ATRASADA: {conta_id} | Venc: {vencimento} | R$ {valor}")
+
+                      url_baixa = f"https://api.bling.com.br/Api/v3/contas/receber/{conta_id}/baixar"
+
+                      payload_baixa = {
+                          "valor": valor,
+                          "data": hoje.strftime("%Y-%m-%d"),
+                          "formaPagamento": {
+                              "id": conta["formaPagamento"]["id"]
+                          }
+                      }
+
+                      res_baixa = requests.post(
+                          url_baixa,
+                          json=payload_baixa,
+                          headers=headers
+                      )
+
+                      print("STATUS BAIXA:", res_baixa.status_code)
+                      print("RESPOSTA:", res_baixa.text)
 
           print("🏁 FINALIZADO")
           EOF
