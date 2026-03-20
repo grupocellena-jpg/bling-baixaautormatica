@@ -2,7 +2,6 @@ import requests
 import os
 import time
 
-# 🔐 Dados do GitHub Secrets
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
@@ -11,7 +10,6 @@ BASE_URL = "https://www.bling.com.br/Api/v3"
 
 print("🤖 ROBÔ DE BAIXA INICIADO")
 
-# 🔄 GERAR TOKEN
 def gerar_token():
     url = f"{BASE_URL}/oauth/token"
 
@@ -36,39 +34,43 @@ headers = {
 }
 
 pagina = 1
+total_baixadas = 0
 
-while True:
+# 🚨 LIMITE DE SEGURANÇA (IMPORTANTE)
+MAX_PAGINAS = 20
+
+while pagina <= MAX_PAGINAS:
     print(f"\n📄 Buscando página {pagina}...")
 
     url = f"{BASE_URL}/contas/receber?page={pagina}&limite=100"
     response = requests.get(url, headers=headers)
 
     if response.status_code != 200:
-        print("❌ Erro na requisição:", response.text)
+        print("❌ Erro:", response.text)
         break
 
     data = response.json()
-    contas = data.get("data", [])
 
-    # 🛑 PARA SE ACABAR
-    if not contas:
+    # 🔍 DEBUG DA ESTRUTURA
+    print("DEBUG DATA:", data)
+
+    contas = data.get("data")
+
+    # 🛑 PARADA REAL
+    if not contas or len(contas) == 0:
         print("\n✅ Fim das páginas.")
         break
 
     for conta in contas:
-        print("\n==============================")
-        print("🔍 DEBUG CONTA COMPLETA:")
-        print(conta)
-
         cliente = conta.get("contato", {})
         tipo = cliente.get("tipoPessoa")
         situacao = conta.get("situacao")
 
-        print("👉 tipoPessoa:", tipo)
-        print("👉 situacao:", situacao)
+        print("👉 tipo:", tipo, "| situação:", situacao)
 
-        # 🚨 PARA AQUI PRA ANALISAR
-        break
+        # 🚨 TESTE: NÃO FILTRA AINDA
+        print("📌 Conta encontrada:", conta.get("id"))
 
-    # 🚨 PARA SÓ NA PRIMEIRA PÁGINA
-    break
+    pagina += 1
+
+print("\n🏁 Finalizado.")
