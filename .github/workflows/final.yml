@@ -28,28 +28,29 @@ jobs:
           base_url = "https://bling.com.br/Api/v2"
           hoje = datetime.now().date()
           
-          print("🛠️ MOTOR V2 ATUALIZADO (Limpando tudo que estiver vencido)")
+          print("🛠️ MOTOR ATUALIZADO (Focando nas contas RECENTES)")
           
           def buscar_e_baixar():
-              processadas_agora = 0
-              for sit in ['atrasada', 'em aberto']:
-                  # Busca as 100 primeiras de cada status
-                  r = requests.get(f"{base_url}/contasreceber/json/?filters=situacao[{sit}]&apikey={api_key}")
+              processadas = 0
+              for sit in ['em aberto', 'atrasada']:
+                  # Mudamos aqui: ele vai pedir as contas ordenadas pela data de vencimento
+                  url = f"{base_url}/contasreceber/json/?filters=situacao[{sit}]; dataVencimento[2020-01-01 TO {hoje}]&apikey={api_key}"
+                  r = requests.get(url)
                   contas = r.json().get('retorno', {}).get('contasreceber', []) if r.status_code == 200 else []
                   
-                  for item in contas:
+                  # Invertemos a lista para pegar as últimas (mais recentes) primeiro
+                  for item in reversed(contas):
                       c = item['contaReceber']
                       venc_str = c.get('vencimento')
                       if venc_str:
                           venc = datetime.strptime(venc_str, '%Y-%m-%d').date()
                           if venc < hoje:
-                              # Tenta liquidar
                               res = requests.post(f"{base_url}/contareceber/{c['id']}/liquidar/json/?apikey={api_key}")
                               if res.status_code == 200:
                                   print(f"✅ Baixada: ID {c['id']} | Venc: {venc_str}")
-                                  processadas_agora += 1
-              return processadas_agora
+                                  processadas += 1
+              return processadas
 
           total = buscar_e_baixar()
-          print(f"🏁 FIM: {total} contas processadas nesta rodada.")
+          print(f"🏁 FIM: {total} contas processadas.")
           EOF
