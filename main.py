@@ -1,9 +1,7 @@
 import requests
 import os
-import time
-from datetime import datetime
 
-print("🔥 VERSAO NOVA RODANDO")
+print("🚀 VERSAO NOVA RODANDO")
 print("🤖 ROBÔ DE BAIXA INICIADO")
 
 CLIENT_ID = os.getenv("CLIENT_ID")
@@ -16,8 +14,6 @@ BASE_URL = "https://www.bling.com.br/Api/v3"
 # GERAR TOKEN
 # =========================
 def gerar_token():
-    print("🔑 TOKEN (SECRET):", REFRESH_TOKEN[:10], "...")
-
     url = f"{BASE_URL}/oauth/token"
 
     data = {
@@ -26,93 +22,88 @@ def gerar_token():
     }
 
     response = requests.post(url, data=data, auth=(CLIENT_ID, CLIENT_SECRET))
-    resp = response.json()
+    resp_json = response.json()
 
-    print("🔍 RESPOSTA TOKEN:", resp)
-
-    if "access_token" not in resp:
-        print("❌ ERRO AO GERAR TOKEN:", resp)
+    if "access_token" not in resp_json:
+        print("❌ Erro ao gerar token:", resp_json)
         exit()
 
-    return resp["access_token"]
+    print("🔄 Token gerado com sucesso")
+    return resp_json["access_token"]
 
 # =========================
-# BUSCAR E BAIXAR CONTAS
+# BUSCAR CONTAS
 # =========================
 def buscar_contas(token):
-    pagina = 1
-    total_baixadas = 0
+    url = f"{BASE_URL}/contas/receber"
 
     headers = {
         "Authorization": f"Bearer {token}"
     }
 
-    while True:
-        print(f"\n📄 Buscando página {pagina}...")
+    params = {
+        "pagina": 1
+    }
 
-        url = f"{BASE_URL}/contas/receber"
+    response = requests.get(url, headers=headers, params=params)
+    data = response.json()
 
-        params = {
-            "pagina": pagina,
-            "situacao": "atrasado"
-        }
+    print("🔍 Buscando página 1...")
 
-        response = requests.get(url, headers=headers, params=params)
-        data = response.json()
+    # 🔥 AQUI ESTÁ A CORREÇÃO
+    contas = data.get("data", [])
 
-        print("🔍 RESPOSTA BRUTA:", data)
+    print(f"📊 {len(contas)} contas encontradas")
 
-        contas = data.get("data", [])
+    return contas, headers
 
-        if not contas:
-            print("🚫 Nenhuma conta encontrada, encerrando...")
-            break
+# =========================
+# BAIXAR CONTAS
+# =========================
+def baixar_contas(contas, headers):
+    total = 0
 
-        print(f"📊 {len(contas)} contas encontradas")
+    for conta in contas:
+        try:
+            # 🔥 GARANTE QUE É DICIONÁRIO
+            if not isinstance(conta, dict):
+                continue
 
-        for conta in contas:
-            try:
-                # garante que é dict
-                if not isinstance(conta, dict):
-                    print("⚠️ Ignorando item inválido:", conta)
-                    continue
+            situacao = conta.get("situacao")
 
-                id_conta = conta.get("id")
+            if situacao != "aberto":
+                continue
 
-                if not id_conta:
-                    print("⚠️ Conta sem ID:", conta)
-                    continue
+            conta_id = conta.get("id")
 
-                print(f"💰 Baixando conta {id_conta}")
+            if not conta_id:
+                continue
 
-                baixa_url = f"{BASE_URL}/contas/receber/{id_conta}/baixar"
+            url = f"{BASE_URL}/contas/receber/{conta_id}/baixar"
 
-                payload = {
-                    "valor": conta.get("valor", 0),
-                    "dataPagamento": datetime.now().strftime("%Y-%m-%d")
-                }
+            response = requests.post(url, headers=headers)
 
-                r = requests.post(baixa_url, headers=headers, json=payload)
+            if response.status_code == 200:
+                total += 1
+                print(f"💰 Conta {conta_id} baixada")
+            else:
+                print(f"⚠️ Erro ao baixar {conta_id}:", response.text)
 
-                if r.status_code == 200:
-                    print("✅ Baixada com sucesso")
-                    total_baixadas += 1
-                else:
-                    print("⚠️ Erro ao baixar:", r.text)
+        except Exception as e:
+            print("⚠️ ERRO:", e)
 
-                time.sleep(0.5)
-
-            except Exception as e:
-                print("⚠️ ERRO:", e)
-
-        pagina += 1
-        time.sleep(1)
-
-    print(f"\n🏁 FINALIZADO - {total_baixadas} contas baixadas")
+    return total
 
 # =========================
 # EXECUÇÃO
 # =========================
-if __name__ == "__main__":
+def main():
     token = gerar_token()
-    buscar_contas(token)
+    contas, headers = buscar_contas(token)
+
+    total = baixar_contas(contas, headers)
+
+    print(f"✅ FINALIZADO - {total} contas baixadas")
+
+if __name__ == "__main__":
+    main()
