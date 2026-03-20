@@ -1,31 +1,46 @@
 import requests
 from datetime import datetime
 import time
+import os
 
 print("🤖 ROBÔ INICIADO")
 
-API_KEY = "b30e0a4ebee3e3ac23ad6fbce5b7b73542d5e078"
-BASE_URL = "https://api.bling.com.br/Api/v3"
+CLIENT_ID = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
+
+# 🔁 GERAR NOVO ACCESS TOKEN
+token_url = "https://www.bling.com.br/Api/v3/oauth/token"
+
+token_data = {
+    "grant_type": "refresh_token",
+    "refresh_token": REFRESH_TOKEN
+}
+
+response = requests.post(token_url, data=token_data, auth=(CLIENT_ID, CLIENT_SECRET))
+token_json = response.json()
+
+access_token = token_json.get("access_token")
 
 headers = {
-    "Authorization": f"Bearer {API_KEY}",
+    "Authorization": f"Bearer {access_token}",
     "Content-Type": "application/json"
 }
 
+BASE_URL = "https://api.bling.com.br/Api/v3"
+
 pagina = 1
-total = 0
+total_baixadas = 0
 
 while True:
-    print(f"📄 Página {pagina}")
+    print(f"\n📄 Página {pagina}")
 
-    url = f"{BASE_URL}/contas/receber?pagina={pagina}"
-    resp = requests.get(url, headers=headers)
+    url = f"{BASE_URL}/contas/receber?page={pagina}"
 
-    if resp.status_code != 200:
-        print("Erro:", resp.text)
-        break
+    r = requests.get(url, headers=headers)
+    data = r.json()
 
-    contas = resp.json().get("data", [])
+    contas = data.get("data", [])
 
     if not contas:
         break
@@ -35,34 +50,47 @@ while True:
     for conta in contas:
         try:
             id_conta = conta.get("id")
-            vencimento = conta.get("vencimento")
-            situacao = conta.get("situacao")
-
-            if situacao != 1:
-                continue
+            vencimento = conta.get("dataVencimento")
 
             if not vencimento:
                 continue
 
+            # 🔍 PEGAR CLIENTE
+            contato = conta.get("contato", {})
+
+            cpf = contato.get("cpf")
+            cnpj = contato.get("cnpj")
+
+            # ❌ IGNORA PESSOA JURÍDICA
+            if cnpj:
+                print(f"🏢 Ignorado PJ: {id_conta}")
+                continue
+
+            # ❌ IGNORA SEM CPF
+            if not cpf:
+                print(f"⚠️ Sem CPF: {id_conta}")
+                continue
+
+            # 📅 VERIFICA VENCIMENTO
             venc_data = datetime.strptime(vencimento, "%Y-%m-%d").date()
 
             if venc_data <= hoje:
-                print(f"💰 Baixando {id_conta}")
+                print(f"💰 Baixando PF {id_conta}")
 
                 url_baixa = f"{BASE_URL}/contas/receber/{id_conta}/baixar"
 
                 payload = {
-                    "data": datetime.today().strftime('%Y-%m-%d'),
+                    "data": hoje.strftime('%Y-%m-%d'),
                     "valor": conta.get("valor", 0)
                 }
 
-                r = requests.post(url_baixa, json=payload, headers=headers)
+                r2 = requests.post(url_baixa, json=payload, headers=headers)
 
-                if r.status_code == 200:
-                    total += 1
+                if r2.status_code == 200:
+                    total_baixadas += 1
                     print("✅ OK")
                 else:
-                    print("❌ Erro:", r.text)
+                    print("❌ Erro:", r2.text)
 
                 time.sleep(0.2)
 
@@ -71,4 +99,4 @@ while True:
 
     pagina += 1
 
-print("🎯 Total baixadas:", total)
+print(f"\n🏁 FINALIZADO - {total_baixadas} contas baixadas (somente PF)")
