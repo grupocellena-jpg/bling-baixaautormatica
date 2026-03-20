@@ -1,7 +1,6 @@
 import requests
 import os
 import time
-from datetime import datetime
 
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
@@ -36,14 +35,12 @@ headers = {
 
 pagina = 1
 total_baixadas = 0
-MAX_PAGINAS = 50
-
-hoje = datetime.today().date()
+MAX_PAGINAS = 3  # 👈 reduzido pra teste rápido
 
 while pagina <= MAX_PAGINAS:
     print(f"\n📄 Buscando página {pagina}...")
 
-    url = f"{BASE_URL}/contas/receber?page={pagina}&limite=100"
+    url = f"{BASE_URL}/contas/receber?page={pagina}&limite=10"
     response = requests.get(url, headers=headers)
 
     if response.status_code != 200:
@@ -53,46 +50,42 @@ while pagina <= MAX_PAGINAS:
     data = response.json()
     contas = data.get("data", [])
 
+    print("🔍 CONTAS RETORNADAS:", len(contas))
+
     if not contas:
-        print("\n✅ Fim das páginas.")
+        print("❌ Nenhuma conta retornada pela API")
         break
 
     for conta in contas:
         try:
-            vencimento = conta.get("dataVencimento")
-
-            if not vencimento:
-                continue
-
-            data_venc = datetime.strptime(vencimento, "%Y-%m-%d").date()
-
-            # 🎯 ATRASADO = venceu antes de hoje
-            if data_venc >= hoje:
-                continue
+            print("\n📌 CONTA COMPLETA:")
+            print(conta)
 
             conta_id = conta.get("id")
 
-            print(f"💰 Baixando conta {conta_id} | Vencimento: {vencimento}")
+            print(f"💰 Tentando baixar conta {conta_id}")
 
             baixa_url = f"{BASE_URL}/contas/receber/{conta_id}/baixar"
 
             payload = {
-                "valor": conta.get("valor"),
-                "data": hoje.strftime("%Y-%m-%d")
+                "valor": conta.get("valor", 0),
+                "data": time.strftime("%Y-%m-%d")
             }
 
             baixa = requests.post(baixa_url, json=payload, headers=headers)
 
+            print("📥 RESPOSTA BAIXA:", baixa.status_code, baixa.text)
+
             if baixa.status_code in [200, 201]:
-                print(f"✅ Baixado: {conta_id}")
+                print(f"✅ BAIXOU: {conta_id}")
                 total_baixadas += 1
             else:
-                print(f"⚠️ Erro ao baixar {conta_id}: {baixa.text}")
+                print(f"⚠️ NÃO BAIXOU: {conta_id}")
 
-            time.sleep(0.2)
+            time.sleep(0.5)
 
         except Exception as e:
-            print("⚠️ Erro:", e)
+            print("⚠️ ERRO:", e)
 
     pagina += 1
 
