@@ -1,64 +1,64 @@
-name: Automação Baixa Bling
+name: Automação Baixa Bling V2
 
 on:
   schedule:
-    # Roda todos os dias às 06:00 UTC (03:00 no horário de Brasília)
     - cron: '0 6 * * *'
-  workflow_dispatch: # Permite que você rode manualmente clicando em um botão no GitHub
+  workflow_dispatch:
 
 jobs:
-  baixar-contas:
+  run-script:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout do código
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configurar Python
+      - name: Instalar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Instalar dependências
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
+        run: pip install requests
 
-      - name: Executar Script de Baixa
+      - name: Rodar script
         env:
-          # Puxa a chave que você salvou nos Secrets do GitHub
           BLING_API_KEY: ${{ secrets.BLING_API_KEY }}
         run: |
           python - <<EOF
           import os
           import requests
+          import json
 
           api_key = os.getenv('BLING_API_KEY')
+          # API v2 não precisa de Token, apenas da Key
           base_url = "https://bling.com.br/Api/v2"
 
-          def buscar_contas_atrasadas():
-              # Filtra por contas atrasadas (vencidas)
+          print("🚀 ROBÔ DE BAIXA INICIADO (API V2)")
+
+          def buscar_contas():
+              # Busca contas com a situação 'atrasada'
               url = f"{base_url}/contasreceber/json/?filters=situacao[atrasada]&apikey={api_key}"
-              response = requests.get(url)
-              dados = response.json()
-              
-              if 'retorno' in dados and 'contasreceber' in dados['retorno']:
-                  return dados['retorno']['contasreceber']
+              res = requests.get(url)
+              if res.status_code == 200:
+                  dados = res.json()
+                  return dados.get('retorno', {}).get('contasreceber', [])
               return []
 
           def baixar_conta(id_conta):
-              # Liquida a conta na data atual
+              # Liquida a conta
               url = f"{base_url}/contareceber/{id_conta}/liquidar/json/?apikey={api_key}"
-              response = requests.post(url)
-              return response.status_code == 200
+              res = requests.post(url)
+              return res.status_code == 200
 
-          contas = buscar_contas_atrasadas()
-          print(f"Encontradas {len(contas)} contas atrasadas.")
+          contas = buscar_contas()
+          print(f"📌 Encontradas {len(contas)} contas atrasadas.")
 
           for item in contas:
-              conta_id = item['contaReceber']['id']
-              if baixar_conta(conta_id):
-                  print(f"Conta ID {conta_id} baixada com sucesso!")
+              c_id = item['contaReceber']['id']
+              if baixar_conta(c_id):
+                  print(f"✅ Conta {c_id} baixada!")
               else:
-                  print(f"Erro ao baixar conta ID {conta_id}")
+                  print(f"❌ Erro na conta {c_id}")
+          
+          print("🏁 PROCESSO FINALIZADO")
           EOF
