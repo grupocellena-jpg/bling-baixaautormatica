@@ -1,4 +1,4 @@
-name: Automação Baixa Bling V2
+name: Automacao Baixa Bling V2
 
 on:
   schedule:
@@ -27,16 +27,13 @@ jobs:
           python - <<EOF
           import os
           import requests
-          import json
 
           api_key = os.getenv('BLING_API_KEY')
-          # API v2 não precisa de Token, apenas da Key
           base_url = "https://bling.com.br/Api/v2"
 
-          print("🚀 ROBÔ DE BAIXA INICIADO (API V2)")
+          print("🛠️ INICIANDO MOTOR V2...")
 
           def buscar_contas():
-              # Busca contas com a situação 'atrasada'
               url = f"{base_url}/contasreceber/json/?filters=situacao[atrasada]&apikey={api_key}"
               res = requests.get(url)
               if res.status_code == 200:
@@ -45,7 +42,6 @@ jobs:
               return []
 
           def baixar_conta(id_conta):
-              # Liquida a conta
               url = f"{base_url}/contareceber/{id_conta}/liquidar/json/?apikey={api_key}"
               res = requests.post(url)
               return res.status_code == 200
@@ -60,5 +56,5 @@ jobs:
               else:
                   print(f"❌ Erro na conta {c_id}")
           
-          print("🏁 PROCESSO FINALIZADO")
+          print("🏁 FINALIZADO")
           EOF
