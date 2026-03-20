@@ -2,6 +2,8 @@ import requests
 import os
 import time
 
+print("🚀 VERSAO NOVA RODANDO")
+
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
@@ -35,7 +37,9 @@ headers = {
 
 pagina = 1
 total_baixadas = 0
-MAX_PAGINAS = 3  # 👈 reduzido pra teste rápido
+
+# 👇 reduzido pra teste rápido
+MAX_PAGINAS = 2
 
 while pagina <= MAX_PAGINAS:
     print(f"\n📄 Buscando página {pagina}...")
@@ -48,9 +52,13 @@ while pagina <= MAX_PAGINAS:
         break
 
     data = response.json()
+
+    print("🔍 RESPOSTA API:")
+    print(data)
+
     contas = data.get("data", [])
 
-    print("🔍 CONTAS RETORNADAS:", len(contas))
+    print("📊 Total contas retornadas:", len(contas))
 
     if not contas:
         print("❌ Nenhuma conta retornada pela API")
