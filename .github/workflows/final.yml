@@ -1,20 +1,94 @@
-import base64
+name: Robo Baixa Oficial Cellena
 
-auth = f"{CLIENT_ID}:{CLIENT_SECRET}"
-auth_base64 = base64.b64encode(auth.encode()).decode()
+on:
+  workflow_dispatch:
 
-headers = {
-    "Authorization": f"Basic {auth_base64}",
-    "Content-Type": "application/x-www-form-urlencoded"
-}
+jobs:
+  baixa-bling:
+    runs-on: ubuntu-latest
 
-payload = {
-    "grant_type": "refresh_token",
-    "refresh_token": REFRESH_TOKEN
-}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-res = requests.post(
-    "https://api.bling.com.br/Api/v3/oauth/token",
-    headers=headers,   # 👈 ISSO É O MAIS IMPORTANTE
-    data=payload
-)
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Instalar dependencias
+        run: pip install requests
+
+      - name: Rodar Baixa
+        env:
+          BLING_CLIENT_ID: ${{ secrets.BLING_CLIENT_ID }}
+          BLING_CLIENT_SECRET: ${{ secrets.BLING_CLIENT_SECRET }}
+          BLING_REFRESH_TOKEN: ${{ secrets.BLING_REFRESH_TOKEN }}
+
+        run: |
+          python - <<EOF
+          import os
+          import requests
+          import base64
+
+          CLIENT_ID = os.getenv("BLING_CLIENT_ID")
+          CLIENT_SECRET = os.getenv("BLING_CLIENT_SECRET")
+          REFRESH_TOKEN = os.getenv("BLING_REFRESH_TOKEN")
+
+          print("🔄 Atualizando token...")
+
+          # 🔐 Monta Basic Auth corretamente
+          auth = f"{CLIENT_ID}:{CLIENT_SECRET}"
+          auth_base64 = base64.b64encode(auth.encode()).decode()
+
+          headers = {
+              "Authorization": f"Basic {auth_base64}",
+              "Content-Type": "application/x-www-form-urlencoded"
+          }
+
+          payload = {
+              "grant_type": "refresh_token",
+              "refresh_token": REFRESH_TOKEN
+          }
+
+          # 🔁 REQUEST CORRETO (COM HEADER!)
+          res = requests.post(
+              "https://api.bling.com.br/Api/v3/oauth/token",
+              headers=headers,
+              data=payload
+          )
+
+          data = res.json()
+
+          print("RESPOSTA TOKEN:", data)
+
+          if "access_token" not in data:
+              print("❌ Erro ao atualizar token")
+              exit()
+
+          access_token = data["access_token"]
+          new_refresh_token = data.get("refresh_token")
+
+          print("✅ Token atualizado")
+
+          if new_refresh_token:
+              print("🔄 NOVO REFRESH TOKEN:")
+              print(new_refresh_token)
+
+          # 🔐 Agora usa o access_token na API
+          headers_api = {
+              "Authorization": f"Bearer {access_token}"
+          }
+
+          print("📡 Testando API...")
+
+          r = requests.get(
+              "https://api.bling.com.br/Api/v3/contas/receber",
+              headers=headers_api
+          )
+
+          print("STATUS:", r.status_code)
+          print("RESPOSTA:", r.text)
+
+          print("🏁 FINALIZADO")
+          EOF
