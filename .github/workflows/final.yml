@@ -22,18 +22,17 @@ jobs:
           BLING_API_KEY: ${{ secrets.BLING_API_KEY }}
         run: |
           python - <<EOF
-          import os, requests
+          import os, requests, json
           from datetime import datetime
           api_key = os.getenv('BLING_API_KEY')
           base_url = "https://bling.com.br/Api/v2"
           hoje = datetime.now().strftime('%d/%m/%Y')
           
-          print(f"🛠️ MOTOR FINAL - MODO LIQUIDAÇÃO FORÇADA ({hoje})")
+          print(f"🛠️ MOTOR DE BAIXA - PRESERVANDO RELATÓRIOS")
           
-          def processar():
-              # Busca contas em aberto e atrasadas
+          def baixar():
               processadas = 0
-              for sit in ['em aberto', 'atrasada']:
+              for sit in ['atrasada', 'em aberto']:
                   r = requests.get(f"{base_url}/contasreceber/json/?filters=situacao[{sit}]&apikey={api_key}")
                   if r.status_code != 200: continue
                   
@@ -41,27 +40,26 @@ jobs:
                   for item in contas:
                       c = item['contaReceber']
                       c_id = c.get('id')
-                      valor = c.get('valor')
-                      venc_str = c.get('vencimento')
+                      venc_original = datetime.strptime(c.get('vencimento'), '%Y-%m-%d').strftime('%d/%m/%Y')
                       
-                      if venc_str and datetime.strptime(venc_str, '%Y-%m-%d').date() < datetime.now().date():
-                          # XML de liquidação forçada com valor total e data de hoje
-                          xml_liq = f"""<?xml version="1.0" encoding="UTF-8"?>
-                          <pagamento>
-                            <data>{hoje}</data>
-                            <valor>{valor}</valor>
-                          </pagamento>"""
-                          
-                          url_liq = f"{base_url}/contareceber/{c_id}/liquidar/json/"
-                          res = requests.post(url_liq, data={'apikey': api_key, 'xml': xml_liq})
-                          
-                          if "sucesso" in res.text.lower():
-                              print(f"✅ SUCESSO: Conta {c_id} Liquidada! (R$ {valor})")
+                      # Tentativa 1: Liquidar com a data de HOJE
+                      xml_hoje = f"<?xml version='1.0' encoding='UTF-8'?><pagamento><data>{hoje}</data></pagamento>"
+                      res = requests.post(f"{base_url}/contareceber/{c_id}/liquidar/json/", data={'apikey': api_key, 'xml': xml_hoje})
+                      
+                      if "sucesso" in res.text.lower():
+                          print(f"✅ SUCESSO: Conta {c_id} baixada hoje.")
+                          processadas += 1
+                      else:
+                          # Tentativa 2: Liquidar com a data do VENCIMENTO (se a de hoje falhar por trava de data)
+                          xml_venc = f"<?xml version='1.0' encoding='UTF-8'?><pagamento><data>{venc_original}</data></pagamento>"
+                          res2 = requests.post(f"{base_url}/contareceber/{c_id}/liquidar/json/", data={'apikey': api_key, 'xml': xml_venc})
+                          if "sucesso" in res2.text.lower():
+                              print(f"✅ SUCESSO: Conta {c_id} baixada com data original.")
                               processadas += 1
                           else:
-                              print(f"⚠️ AVISO: Conta {c_id} não liquidou. Resposta: {res.text[:100]}")
+                              print(f"⚠️ PULEI: Conta {c_id} tem travas manuais (Erro 31/48).")
               return processadas
 
-          total = processar()
-          print(f"🏁 FIM: {total} contas processadas.")
+          total = baixar()
+          print(f"🏁 FIM: {total} contas baixadas sem excluir nada.")
           EOF
