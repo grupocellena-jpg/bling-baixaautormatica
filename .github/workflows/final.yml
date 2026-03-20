@@ -27,21 +27,29 @@ jobs:
           api_key = os.getenv('BLING_API_KEY')
           base_url = "https://bling.com.br/Api/v2"
           hoje = datetime.now().date()
-          print("🛠️ INICIANDO MOTOR FINAL (Atrasadas + Em Aberto Vencidas)")
-          def buscar(sit):
-              r = requests.get(f"{base_url}/contasreceber/json/?filters=situacao[{sit}]&apikey={api_key}")
-              return r.json().get('retorno', {}).get('contasreceber', []) if r.status_code == 200 else []
-          todas = buscar('atrasada') + buscar('em aberto')
-          processadas = 0
-          for item in todas:
-              c = item['contaReceber']
-              venc_str = c.get('vencimento')
-              if venc_str:
-                  venc = datetime.strptime(venc_str, '%Y-%m-%d').date()
-                  if venc < hoje:
-                      res = requests.post(f"{base_url}/contareceber/{c['id']}/liquidar/json/?apikey={api_key}")
-                      if res.status_code == 200:
-                          print(f"✅ Conta {c['id']} (Venc: {venc_str}) baixada!")
-                          processadas += 1
-          print(f"🏁 FIM: {processadas} contas processadas.")
+          
+          print("🛠️ MOTOR V2 ATUALIZADO (Limpando tudo que estiver vencido)")
+          
+          def buscar_e_baixar():
+              processadas_agora = 0
+              for sit in ['atrasada', 'em aberto']:
+                  # Busca as 100 primeiras de cada status
+                  r = requests.get(f"{base_url}/contasreceber/json/?filters=situacao[{sit}]&apikey={api_key}")
+                  contas = r.json().get('retorno', {}).get('contasreceber', []) if r.status_code == 200 else []
+                  
+                  for item in contas:
+                      c = item['contaReceber']
+                      venc_str = c.get('vencimento')
+                      if venc_str:
+                          venc = datetime.strptime(venc_str, '%Y-%m-%d').date()
+                          if venc < hoje:
+                              # Tenta liquidar
+                              res = requests.post(f"{base_url}/contareceber/{c['id']}/liquidar/json/?apikey={api_key}")
+                              if res.status_code == 200:
+                                  print(f"✅ Baixada: ID {c['id']} | Venc: {venc_str}")
+                                  processadas_agora += 1
+              return processadas_agora
+
+          total = buscar_e_baixar()
+          print(f"🏁 FIM: {total} contas processadas nesta rodada.")
           EOF
