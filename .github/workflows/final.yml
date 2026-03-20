@@ -28,37 +28,41 @@ jobs:
           base_url = "https://bling.com.br/Api/v2"
           hoje = datetime.now().date()
           
-          print("🛠️ TENTATIVA VIA UPDATE DE SITUAÇÃO")
+          print("🛠️ MOTOR V3 - ATUALIZAÇÃO DIRETA DE STATUS")
           
           def processar():
-              # Buscamos as contas em aberto
+              # Buscamos as contas 'em aberto'
               r = requests.get(f"{base_url}/contasreceber/json/?filters=situacao[em aberto]&apikey={api_key}")
-              contas = r.json().get('retorno', {}).get('contasreceber', []) if r.status_code == 200 else []
+              if r.status_code != 200:
+                  print("Erro na API: Verifique sua chave.")
+                  return
               
-              if not contas:
-                  print("Nenhuma conta 'Em aberto' encontrada.")
-                  return 0
+              dados = r.json().get('retorno', {}).get('contasreceber', [])
+              if not dados:
+                  print("Nenhuma conta encontrada para processar.")
+                  return
 
-              baixadas = 0
-              for item in contas:
+              for item in dados:
                   c = item['contaReceber']
+                  c_id = c['id']
                   venc = datetime.strptime(c['vencimento'], '%Y-%m-%d').date()
                   
                   if venc < hoje:
-                      # XML minimalista apenas para trocar o status para 'pago'
-                      xml = f"<?xml version='1.0' encoding='UTF-8'?><contareceber><situacao>pago</situacao></contareceber>"
+                      # XML minimalista para forçar a mudança de situação
+                      xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+                      <contareceber>
+                          <situacao>pago</situacao>
+                      </contareceber>"""
                       
-                      # Usamos POST para a URL de atualização da conta
-                      url = f"{base_url}/contareceber/{c['id']}/json/"
-                      res = requests.post(url, data={'apikey': api_key, 'xml': xml})
+                      # Enviamos para a rota de atualização (sem o /liquidar/)
+                      url_update = f"{base_url}/contareceber/{c_id}/json/"
+                      res = requests.post(url_update, data={'apikey': api_key, 'xml': xml})
                       
-                      if "retorno" in res.text and "erros" not in res.text:
-                          print(f"✅ CONTA {c['id']} -> PAGO")
-                          baixadas += 1
+                      if "erros" not in res.text.lower():
+                          print(f"✅ CONTA {c_id} (Venc: {venc}) -> STATUS ALTERADO PARA PAGO")
                       else:
-                          print(f"❌ ID {c['id']} BLOQUEADO: {res.text[:100]}")
-              return baixadas
+                          print(f"❌ CONTA {c_id} -> ERRO: {res.text}")
 
-          total = processar()
-          print(f"🏁 FIM: {total} contas alteradas.")
+          processar()
+          print("🏁 PROCESSO FINALIZADO")
           EOF
