@@ -2,22 +2,28 @@ name: Baixa automática Bling
 
 on:
   schedule:
-    - cron: '0 9 * * *'
+    - cron: '0 */2 * * *'  # roda a cada 2 horas
   workflow_dispatch:
 
 jobs:
-  run:
+  run-script:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Setup Python
+      - name: Instalar Python
         uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
-      - name: Install requests
+      - name: Instalar dependências
         run: pip install requests
 
-      - name: Run script
+      - name: Rodar script
+        env:
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
         run: python main.py
