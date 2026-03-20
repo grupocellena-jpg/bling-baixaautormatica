@@ -1,6 +1,7 @@
 import requests
 import os
 import time
+from datetime import datetime
 
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
@@ -37,6 +38,8 @@ pagina = 1
 total_baixadas = 0
 MAX_PAGINAS = 50
 
+hoje = datetime.today().date()
+
 while pagina <= MAX_PAGINAS:
     print(f"\n📄 Buscando página {pagina}...")
 
@@ -44,7 +47,7 @@ while pagina <= MAX_PAGINAS:
     response = requests.get(url, headers=headers)
 
     if response.status_code != 200:
-        print("❌ Erro na requisição:", response.text)
+        print("❌ Erro:", response.text)
         break
 
     data = response.json()
@@ -56,27 +59,32 @@ while pagina <= MAX_PAGINAS:
 
     for conta in contas:
         try:
-            situacao = str(conta.get("situacao", "")).upper()
+            vencimento = conta.get("dataVencimento")
 
-            # 🎯 FILTRO: SOMENTE ATRASADAS (flexível)
-            if "ATRAS" not in situacao:
+            if not vencimento:
+                continue
+
+            data_venc = datetime.strptime(vencimento, "%Y-%m-%d").date()
+
+            # 🎯 ATRASADO = venceu antes de hoje
+            if data_venc >= hoje:
                 continue
 
             conta_id = conta.get("id")
 
-            print(f"💰 Baixando conta {conta_id} | Situação: {situacao}")
+            print(f"💰 Baixando conta {conta_id} | Vencimento: {vencimento}")
 
             baixa_url = f"{BASE_URL}/contas/receber/{conta_id}/baixar"
 
             payload = {
                 "valor": conta.get("valor"),
-                "data": time.strftime("%Y-%m-%d")
+                "data": hoje.strftime("%Y-%m-%d")
             }
 
             baixa = requests.post(baixa_url, json=payload, headers=headers)
 
             if baixa.status_code in [200, 201]:
-                print(f"✅ Baixado com sucesso: {conta_id}")
+                print(f"✅ Baixado: {conta_id}")
                 total_baixadas += 1
             else:
                 print(f"⚠️ Erro ao baixar {conta_id}: {baixa.text}")
