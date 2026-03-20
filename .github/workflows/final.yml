@@ -26,43 +26,40 @@ jobs:
           from datetime import datetime
           api_key = os.getenv('BLING_API_KEY')
           base_url = "https://bling.com.br/Api/v2"
-          hoje = datetime.now().date()
+          hoje = datetime.now().strftime('%d/%m/%Y')
           
-          print("🛠️ MOTOR FINAL - MODO ALTERAÇÃO DE STATUS")
+          print(f"🛠️ MOTOR FINAL - MODO LIQUIDAÇÃO FORÇADA ({hoje})")
           
           def processar():
+              # Busca contas em aberto e atrasadas
               processadas = 0
-              # Buscamos as contas em aberto
-              r = requests.get(f"{base_url}/contasreceber/json/?filters=situacao[em aberto]&apikey={api_key}")
-              if r.status_code != 200:
-                  print("Erro ao acessar API")
-                  return 0
-              
-              contas = r.json().get('retorno', {}).get('contasreceber', [])
-              
-              for item in contas:
-                  c = item['contaReceber']
-                  venc_str = c.get('vencimento')
-                  c_id = c.get('id')
+              for sit in ['em aberto', 'atrasada']:
+                  r = requests.get(f"{base_url}/contasreceber/json/?filters=situacao[{sit}]&apikey={api_key}")
+                  if r.status_code != 200: continue
                   
-                  if venc_str:
-                      venc = datetime.strptime(venc_str, '%Y-%m-%d').date()
-                      # Se a conta está vencida
-                      if venc < hoje:
-                          # XML para mudar o status para 'pago' (liquidação simples)
-                          xml_baixa = f"""<?xml version="1.0" encoding="UTF-8"?>
-                          <contareceber>
-                            <situacao>pago</situacao>
-                          </contareceber>"""
+                  contas = r.json().get('retorno', {}).get('contasreceber', [])
+                  for item in contas:
+                      c = item['contaReceber']
+                      c_id = c.get('id')
+                      valor = c.get('valor')
+                      venc_str = c.get('vencimento')
+                      
+                      if venc_str and datetime.strptime(venc_str, '%Y-%m-%d').date() < datetime.now().date():
+                          # XML de liquidação forçada com valor total e data de hoje
+                          xml_liq = f"""<?xml version="1.0" encoding="UTF-8"?>
+                          <pagamento>
+                            <data>{hoje}</data>
+                            <valor>{valor}</valor>
+                          </pagamento>"""
                           
-                          url_put = f"{base_url}/contareceber/{c_id}/json/"
-                          res = requests.post(url_put, data={'apikey': api_key, 'xml': xml_baixa})
+                          url_liq = f"{base_url}/contareceber/{c_id}/liquidar/json/"
+                          res = requests.post(url_liq, data={'apikey': api_key, 'xml': xml_liq})
                           
-                          if res.status_code in [200, 201]:
-                              print(f"✅ SUCESSO: Conta {c_id} alterada para PAGO (Venc: {venc_str})")
+                          if "sucesso" in res.text.lower():
+                              print(f"✅ SUCESSO: Conta {c_id} Liquidada! (R$ {valor})")
                               processadas += 1
                           else:
-                              print(f"❌ FALHA: Conta {c_id} - Erro: {res.text}")
+                              print(f"⚠️ AVISO: Conta {c_id} não liquidou. Resposta: {res.text[:100]}")
               return processadas
 
           total = processar()
