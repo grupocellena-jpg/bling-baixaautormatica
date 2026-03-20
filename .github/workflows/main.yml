@@ -27,14 +27,16 @@ jobs:
           python - <<EOF
           import os
           import requests
+          from datetime import datetime
 
           api_key = os.getenv('BLING_API_KEY')
           base_url = "https://bling.com.br/Api/v2"
+          hoje = datetime.now().date()
 
-          print("🛠️ INICIANDO MOTOR V2 OFICIAL...")
+          print(f"🛠️ INICIANDO MOTOR V2 (Busca: Atrasadas + Em Aberto Vencidas)")
 
-          def buscar_contas():
-              url = f"{base_url}/contasreceber/json/?filters=situacao[atrasada]&apikey={api_key}"
+          def buscar_contas(situacao):
+              url = f"{base_url}/contasreceber/json/?filters=situacao[{situacao}]&apikey={api_key}"
               res = requests.get(url)
               if res.status_code == 200:
                   dados = res.json()
@@ -46,11 +48,23 @@ jobs:
               res = requests.post(url)
               return res.status_code == 200
 
-          contas = buscar_contas()
-          print(f"📌 Encontradas {len(contas)} contas atrasadas.")
+          # Busca nos dois status para não perder nada
+          todas_contas = buscar_contas('atrasada') + buscar_contas('em aberto')
+          
+          contas_para_baixar = []
+          for item in todas_contas:
+              conta = item['contaReceber']
+              vencimento_str = conta.get('vencimento')
+              
+              if vencimento_str:
+                  vencimento = datetime.strptime(vencimento_str, '%Y-%m-%d').date()
+                  # Se a conta está vencida (data menor que hoje)
+                  if vencimento < hoje:
+                      contas_para_baixar.append(conta['id'])
 
-          for item in contas:
-              c_id = item['contaReceber']['id']
+          print(f"📌 Encontradas {len(contas_para_baixar)} contas vencidas para processar.")
+
+          for c_id in contas_para_baixar:
               if baixar_conta(c_id):
                   print(f"✅ Conta {c_id} baixada com sucesso!")
               else:
