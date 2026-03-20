@@ -20,7 +20,7 @@ jobs:
       - name: Instalar dependencias
         run: pip install requests
 
-      - name: Rodar script de baixa
+      - name: Executar Motor de Baixa
         env:
           BLING_API_KEY: ${{ secrets.BLING_API_KEY }}
         run: |
