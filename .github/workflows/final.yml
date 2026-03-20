@@ -22,44 +22,43 @@ jobs:
           BLING_API_KEY: ${{ secrets.BLING_API_KEY }}
         run: |
           python - <<EOF
-          import os, requests, json
+          import os, requests
           from datetime import datetime
           api_key = os.getenv('BLING_API_KEY')
           base_url = "https://bling.com.br/Api/v2"
-          hoje = datetime.now().strftime('%d/%m/%Y')
+          hoje = datetime.now().date()
           
-          print(f"🛠️ MOTOR DE BAIXA - PRESERVANDO RELATÓRIOS")
+          print("🛠️ TENTATIVA VIA UPDATE DE SITUAÇÃO")
           
-          def baixar():
-              processadas = 0
-              for sit in ['atrasada', 'em aberto']:
-                  r = requests.get(f"{base_url}/contasreceber/json/?filters=situacao[{sit}]&apikey={api_key}")
-                  if r.status_code != 200: continue
-                  
-                  contas = r.json().get('retorno', {}).get('contasreceber', [])
-                  for item in contas:
-                      c = item['contaReceber']
-                      c_id = c.get('id')
-                      venc_original = datetime.strptime(c.get('vencimento'), '%Y-%m-%d').strftime('%d/%m/%Y')
-                      
-                      # Tentativa 1: Liquidar com a data de HOJE
-                      xml_hoje = f"<?xml version='1.0' encoding='UTF-8'?><pagamento><data>{hoje}</data></pagamento>"
-                      res = requests.post(f"{base_url}/contareceber/{c_id}/liquidar/json/", data={'apikey': api_key, 'xml': xml_hoje})
-                      
-                      if "sucesso" in res.text.lower():
-                          print(f"✅ SUCESSO: Conta {c_id} baixada hoje.")
-                          processadas += 1
-                      else:
-                          # Tentativa 2: Liquidar com a data do VENCIMENTO (se a de hoje falhar por trava de data)
-                          xml_venc = f"<?xml version='1.0' encoding='UTF-8'?><pagamento><data>{venc_original}</data></pagamento>"
-                          res2 = requests.post(f"{base_url}/contareceber/{c_id}/liquidar/json/", data={'apikey': api_key, 'xml': xml_venc})
-                          if "sucesso" in res2.text.lower():
-                              print(f"✅ SUCESSO: Conta {c_id} baixada com data original.")
-                              processadas += 1
-                          else:
-                              print(f"⚠️ PULEI: Conta {c_id} tem travas manuais (Erro 31/48).")
-              return processadas
+          def processar():
+              # Buscamos as contas em aberto
+              r = requests.get(f"{base_url}/contasreceber/json/?filters=situacao[em aberto]&apikey={api_key}")
+              contas = r.json().get('retorno', {}).get('contasreceber', []) if r.status_code == 200 else []
+              
+              if not contas:
+                  print("Nenhuma conta 'Em aberto' encontrada.")
+                  return 0
 
-          total = baixar()
-          print(f"🏁 FIM: {total} contas baixadas sem excluir nada.")
+              baixadas = 0
+              for item in contas:
+                  c = item['contaReceber']
+                  venc = datetime.strptime(c['vencimento'], '%Y-%m-%d').date()
+                  
+                  if venc < hoje:
+                      # XML minimalista apenas para trocar o status para 'pago'
+                      xml = f"<?xml version='1.0' encoding='UTF-8'?><contareceber><situacao>pago</situacao></contareceber>"
+                      
+                      # Usamos POST para a URL de atualização da conta
+                      url = f"{base_url}/contareceber/{c['id']}/json/"
+                      res = requests.post(url, data={'apikey': api_key, 'xml': xml})
+                      
+                      if "retorno" in res.text and "erros" not in res.text:
+                          print(f"✅ CONTA {c['id']} -> PAGO")
+                          baixadas += 1
+                      else:
+                          print(f"❌ ID {c['id']} BLOQUEADO: {res.text[:100]}")
+              return baixadas
+
+          total = processar()
+          print(f"🏁 FIM: {total} contas alteradas.")
           EOF
