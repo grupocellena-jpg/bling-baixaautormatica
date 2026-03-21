@@ -17,7 +17,7 @@ jobs:
           python-version: 3.11
 
       - name: Instalar dependências
-        run: pip install requests
+        run: pip install requests pynacl
 
       - name: Executar robô Bling
         env:
@@ -31,8 +31,25 @@ jobs:
           import requests
           import base64
           import time
-          import json
+          import os
+          from nacl import encoding, public
 
+          # =========================
+          # 🔐 VARIÁVEIS
+          # =========================
+          CLIENT_ID = os.getenv("CLIENT_ID")
+          CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+          REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
+          GH_TOKEN = os.getenv("GH_TOKEN")
+          REPO = os.getenv("REPO")
+
+          if not CLIENT_ID or not CLIENT_SECRET or not REFRESH_TOKEN:
+              print("❌ Variáveis não carregadas")
+              exit()
+
+          # =========================
+          # 🔄 TOKEN
+          # =========================
           print("🔄 Atualizando token...")
 
           url = "https://www.bling.com.br/Api/v3/oauth/token"
@@ -63,35 +80,42 @@ jobs:
 
           print("✅ Token atualizado")
 
-          # 🔐 SALVA NOVO REFRESH TOKEN NO GITHUB
+          # =========================
+          # 🔐 SALVAR REFRESH NO GITHUB
+          # =========================
           print("🔄 Atualizando refresh_token no GitHub...")
 
-          gh_url = f"https://api.github.com/repos/{REPO}/actions/secrets/BLING_REFRESH_TOKEN"
-
-          public_key = requests.get(
+          public_key_data = requests.get(
               f"https://api.github.com/repos/{REPO}/actions/secrets/public-key",
               headers={"Authorization": f"Bearer {GH_TOKEN}"}
           ).json()
 
-          from nacl import encoding, public
+          public_key = public.PublicKey(
+              public_key_data["key"].encode(),
+              encoding.Base64Encoder()
+          )
 
-          public_key_bytes = public.PublicKey(public_key["key"].encode(), encoding.Base64Encoder())
-          sealed_box = public.SealedBox(public_key_bytes)
+          sealed_box = public.SealedBox(public_key)
           encrypted = sealed_box.encrypt(new_refresh.encode())
           encrypted_value = base64.b64encode(encrypted).decode()
 
-          requests.put(
-              gh_url,
-              headers={"Authorization": f"Bearer {GH_TOKEN}"},
+          update_res = requests.put(
+              f"https://api.github.com/repos/{REPO}/actions/secrets/BLING_REFRESH_TOKEN",
+              headers={
+                  "Authorization": f"Bearer {GH_TOKEN}",
+                  "Accept": "application/vnd.github+json"
+              },
               json={
                   "encrypted_value": encrypted_value,
-                  "key_id": public_key["key_id"]
+                  "key_id": public_key_data["key_id"]
               }
           )
 
-          print("✅ Refresh token atualizado no GitHub")
+          print("STATUS GITHUB:", update_res.status_code)
 
-          # 🚀 BUSCAR CONTAS
+          # =========================
+          # 📡 BUSCAR CONTAS
+          # =========================
           print("📡 Buscando contas...")
 
           contas = []
@@ -100,23 +124,27 @@ jobs:
           while True:
               url_contas = f"https://www.bling.com.br/Api/v3/contas/receber?pagina={page}"
 
-              res = requests.get(
+              r = requests.get(
                   url_contas,
                   headers={"Authorization": f"Bearer {access_token}"}
               )
 
-              data = res.json()
+              data = r.json()
 
               if "data" not in data or not data["data"]:
                   break
 
               contas.extend(data["data"])
+              print(f"📄 Página {page} carregada")
+
               page += 1
-              time.sleep(0.5)
+              time.sleep(0.4)
 
           print(f"📊 {len(contas)} contas encontradas")
 
-          # 💰 BAIXAR ATRASADAS
+          # =========================
+          # 💰 BAIXA
+          # =========================
           print("🔄 Iniciando baixa...")
 
           baixadas = 0
@@ -124,26 +152,28 @@ jobs:
           for c in contas:
               situacao = str(c.get("situacao", ""))
 
+              # 🔥 ajuste aqui se quiser filtrar melhor
               if situacao not in ["1", "2"]:
                   continue
 
               id_conta = c["id"]
+              valor = c.get("valor", 0)
 
-              print(f"➡️ Baixando {id_conta}")
+              print(f"➡️ Baixando {id_conta} | R$ {valor}")
 
-              res = requests.post(
+              r = requests.post(
                   f"https://www.bling.com.br/Api/v3/contas/receber/{id_conta}/baixar",
                   headers={"Authorization": f"Bearer {access_token}"},
-                  json={"valor": c["valor"]}
+                  json={"valor": valor}
               )
 
-              if res.status_code in [200, 201]:
+              if r.status_code in [200, 201]:
                   baixadas += 1
                   print("✅ OK")
               else:
-                  print("⚠️ Falha:", res.text)
+                  print("⚠️ ERRO:", r.text)
 
-              time.sleep(0.4)
+              time.sleep(0.5)
 
           print(f"🏁 FINALIZADO | {baixadas} contas baixadas")
           EOF
