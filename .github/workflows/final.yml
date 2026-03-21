@@ -1,10 +1,7 @@
-name: Baixa automática Bling (AUTO DIÁRIO)
+name: Baixa automática Bling (DEBUG FINAL)
 
 on:
   workflow_dispatch:
-
-  schedule:
-    - cron: "0 10 * * *"  # 07:00 Brasil
 
 jobs:
   baixar:
@@ -128,19 +125,32 @@ jobs:
           log(f"📊 Total: {len(contas)} contas")
 
           # =========================
-          # BAIXAR CONTAS
+          # DEBUG REAL (AMOSTRA)
+          # =========================
+          log("🧪 DEBUG PRIMEIRA CONTA:")
+          if contas:
+              c = contas[0]
+              log({
+                  "id": c.get("id"),
+                  "situacao": c.get("situacao"),
+                  "dataVencimento": c.get("dataVencimento"),
+                  "valor": c.get("valor")
+              })
+
+          # =========================
+          # BAIXAR (FILTRO FLEXÍVEL)
           # =========================
           baixadas = 0
 
           for c in contas:
               try:
-                  situacao = str(c.get("situacao"))
                   venc = c.get("dataVencimento")
 
-                  if situacao != "1":
+                  # 🔥 foco apenas na data (mais confiável)
+                  if not venc:
                       continue
 
-                  if not venc or venc >= hoje:
+                  if venc >= hoje:
                       continue
 
                   idc = c["id"]
