@@ -1,4 +1,4 @@
-name: Baixa automática Bling (AUTO CONTA)
+name: Baixa automática Bling (ULTRA RESILIENTE)
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
 
       - run: pip install requests pynacl
 
-      - name: Executar robô
+      - name: Executar robô blindado
         env:
           CLIENT_ID: ${{ secrets.BLING_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.BLING_CLIENT_SECRET }}
@@ -38,9 +38,13 @@ jobs:
 
           hoje = datetime.now().strftime("%Y-%m-%d")
 
+          def log(msg):
+              print(msg, flush=True)
+
           # =========================
           # TOKEN
           # =========================
+          log("🔄 Atualizando token...")
           auth = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
 
           res = requests.post(
@@ -56,60 +60,78 @@ jobs:
           )
 
           if res.status_code != 200:
-              print("❌ ERRO TOKEN:", res.text)
+              log(f"❌ ERRO TOKEN: {res.text}")
               exit()
 
           data = res.json()
           access_token = data["access_token"]
           new_refresh = data["refresh_token"]
 
-          print("✅ Token OK")
+          log("✅ Token OK")
 
           # =========================
           # SALVAR REFRESH
           # =========================
-          key = requests.get(
-              f"https://api.github.com/repos/{REPO}/actions/secrets/public-key",
-              headers={"Authorization": f"Bearer {GH_TOKEN}"}
-          ).json()
+          try:
+              key = requests.get(
+                  f"https://api.github.com/repos/{REPO}/actions/secrets/public-key",
+                  headers={"Authorization": f"Bearer {GH_TOKEN}"}
+              ).json()
 
-          pk = public.PublicKey(key["key"].encode(), encoding.Base64Encoder())
-          sealed = public.SealedBox(pk)
-          encrypted = base64.b64encode(sealed.encrypt(new_refresh.encode())).decode()
+              pk = public.PublicKey(key["key"].encode(), encoding.Base64Encoder())
+              sealed = public.SealedBox(pk)
+              encrypted = base64.b64encode(sealed.encrypt(new_refresh.encode())).decode()
 
-          requests.put(
-              f"https://api.github.com/repos/{REPO}/actions/secrets/BLING_REFRESH_TOKEN",
-              headers={"Authorization": f"Bearer {GH_TOKEN}"},
-              json={
-                  "encrypted_value": encrypted,
-                  "key_id": key["key_id"]
-              }
-          )
+              requests.put(
+                  f"https://api.github.com/repos/{REPO}/actions/secrets/BLING_REFRESH_TOKEN",
+                  headers={"Authorization": f"Bearer {GH_TOKEN}"},
+                  json={"encrypted_value": encrypted, "key_id": key["key_id"]}
+              )
 
-          print("🔐 Refresh atualizado")
+              log("🔐 Refresh atualizado")
+          except Exception as e:
+              log(f"⚠️ Falha ao salvar refresh: {e}")
 
           # =========================
-          # 🔍 BUSCAR CONTAS FINANCEIRAS
+          # 🔍 BUSCAR CONTAS FINANCEIRAS (MULTI ENDPOINT)
           # =========================
-          print("🔍 Buscando contas financeiras...")
+          endpoints = [
+              "contas/caixas",
+              "contas",
+              "financeiro/contas"
+          ]
 
-          r = requests.get(
-              "https://www.bling.com.br/Api/v3/contas",
-              headers={"Authorization": f"Bearer {access_token}"}
-          )
+          contas_fin = []
 
-          contas_fin = r.json().get("data", [])
+          for ep in endpoints:
+              try:
+                  log(f"🔍 Tentando endpoint: {ep}")
+                  r = requests.get(
+                      f"https://www.bling.com.br/Api/v3/{ep}",
+                      headers={"Authorization": f"Bearer {access_token}"}
+                  )
+
+                  data = r.json()
+
+                  if data.get("data"):
+                      contas_fin = data["data"]
+                      log(f"✅ Encontrou contas em: {ep}")
+                      break
+
+              except Exception as e:
+                  log(f"⚠️ Erro endpoint {ep}: {e}")
 
           if not contas_fin:
-              print("❌ Nenhuma conta financeira encontrada")
+              log("❌ Nenhuma conta financeira encontrada em nenhum endpoint")
               exit()
 
-          # 🎯 PRIORIDADE INTELIGENTE
+          # =========================
+          # ESCOLHER CONTA INTELIGENTE
+          # =========================
           conta_id = None
 
           for c in contas_fin:
-              nome = (c.get("descricao") or "").lower()
-
+              nome = str(c.get("descricao", "")).lower()
               if "mercado pago" in nome:
                   conta_id = c["id"]
                   break
@@ -117,15 +139,16 @@ jobs:
           if not conta_id:
               conta_id = contas_fin[0]["id"]
 
-          print(f"🏦 Conta selecionada: {conta_id}")
+          log(f"🏦 Conta escolhida: {conta_id}")
 
           # =========================
           # BUSCAR CONTAS A RECEBER
           # =========================
           contas = []
           page = 1
+          MAX_PAGES = 100
 
-          while True:
+          while page <= MAX_PAGES:
               r = requests.get(
                   f"https://www.bling.com.br/Api/v3/contas/receber?pagina={page}",
                   headers={"Authorization": f"Bearer {access_token}"}
@@ -137,40 +160,38 @@ jobs:
                   break
 
               contas.extend(data["data"])
-              print(f"📄 Página {page}")
+              log(f"📄 Página {page}")
 
               page += 1
-              time.sleep(0.3)
+              time.sleep(0.2)
 
-          print(f"📊 Total: {len(contas)}")
+          log(f"📊 Total contas: {len(contas)}")
 
           # =========================
-          # BAIXA INTELIGENTE
+          # BAIXA
           # =========================
           baixadas = 0
 
           for c in contas:
-              situacao = str(c.get("situacao"))
-              venc = c.get("dataVencimento")
+              try:
+                  situacao = str(c.get("situacao"))
+                  venc = c.get("dataVencimento")
 
-              if situacao != "1":
-                  continue
+                  if situacao != "1":
+                      continue
 
-              if not venc or venc >= hoje:
-                  continue
+                  if not venc or venc >= hoje:
+                      continue
 
-              idc = c["id"]
-              valor = float(c.get("valor", 0))
+                  idc = c["id"]
+                  valor = float(c.get("valor", 0))
 
-              payload = {
-                  "valor": valor,
-                  "dataPagamento": hoje,
-                  "conta": {
-                      "id": conta_id
+                  payload = {
+                      "valor": valor,
+                      "dataPagamento": hoje,
+                      "conta": {"id": conta_id}
                   }
-              }
 
-              for tentativa in range(3):
                   r = requests.post(
                       f"https://www.bling.com.br/Api/v3/contas/receber/{idc}/baixar",
                       headers={"Authorization": f"Bearer {access_token}"},
@@ -179,19 +200,18 @@ jobs:
 
                   if r.status_code in [200, 201]:
                       baixadas += 1
-                      print(f"✅ {idc}")
-                      break
+                      log(f"✅ {idc}")
 
-                  elif r.status_code == 429:
-                      time.sleep(2)
+                  elif "já foi baixada" in r.text:
+                      continue
 
                   else:
-                      if "já foi baixada" in r.text:
-                          break
-                      print(f"⚠️ {idc}:", r.text)
-                      break
+                      log(f"⚠️ {idc}: {r.text}")
 
-              time.sleep(0.2)
+                  time.sleep(0.2)
 
-          print(f"🏁 FINAL: {baixadas} baixadas")
+              except Exception as e:
+                  log(f"⚠️ erro item: {e}")
+
+          log(f"🏁 FINAL: {baixadas} baixadas")
           EOF
