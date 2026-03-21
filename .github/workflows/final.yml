@@ -3,7 +3,7 @@ name: Baixa automática Bling
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/15 * * * *"  # roda a cada 15 min
+    - cron: "*/15 * * * *"
 
 jobs:
   baixar:
@@ -19,7 +19,7 @@ jobs:
           python-version: "3.11"
 
       - name: Instalar dependências
-        run: pip install requests
+        run: pip install requests pynacl
 
       - name: Rodar automação completa
         env:
@@ -34,6 +34,8 @@ jobs:
           import os
           import time
           from datetime import datetime
+          import base64
+          from nacl import encoding, public
 
           CLIENT_ID = os.getenv("CLIENT_ID")
           CLIENT_SECRET = os.getenv("CLIENT_SECRET")
@@ -67,26 +69,45 @@ jobs:
           print("✅ Token atualizado")
 
           # ===============================
-          # 💾 ATUALIZAR REFRESH TOKEN NO GITHUB
+          # 🔐 CRIPTOGRAFAR E SALVAR NO GITHUB
           # ===============================
-          print("🔄 Atualizando refresh_token no GitHub...")
+          print("🔐 Atualizando refresh_token no GitHub...")
 
           headers = {
               "Authorization": f"token {GH_TOKEN}",
               "Accept": "application/vnd.github+json"
           }
 
-          secret_url = f"https://api.github.com/repos/{REPO}/actions/secrets/BLING_REFRESH_TOKEN"
+          # 🔑 1. Buscar public key do repo
+          key_resp = requests.get(
+              f"https://api.github.com/repos/{REPO}/actions/secrets/public-key",
+              headers=headers
+          ).json()
 
-          requests.put(secret_url, headers=headers, json={
-              "encrypted_value": new_refresh_token,
-              "key_id": "dummy"
-          })
+          public_key = key_resp["key"]
+          key_id = key_resp["key_id"]
 
-          print("✅ Refresh token atualizado (simulado - GitHub exige encryption real)")
+          # 🔒 2. Criptografar
+          public_key_obj = public.PublicKey(public_key.encode("utf-8"), encoding.Base64Encoder())
+          sealed_box = public.SealedBox(public_key_obj)
+
+          encrypted = sealed_box.encrypt(new_refresh_token.encode("utf-8"))
+          encrypted_value = base64.b64encode(encrypted).decode("utf-8")
+
+          # 💾 3. Enviar pro GitHub
+          put_resp = requests.put(
+              f"https://api.github.com/repos/{REPO}/actions/secrets/BLING_REFRESH_TOKEN",
+              headers=headers,
+              json={
+                  "encrypted_value": encrypted_value,
+                  "key_id": key_id
+              }
+          )
+
+          print("✅ Refresh token salvo automaticamente!")
 
           # ===============================
-          # 🔎 BUSCAR CONTAS (PAGINADO)
+          # 🔎 BUSCAR CONTAS
           # ===============================
           print("🔎 Buscando contas...")
 
@@ -94,7 +115,7 @@ jobs:
           pagina = 1
 
           while True:
-              print(f"📄 Buscando página {pagina}...")
+              print(f"📄 Página {pagina}...")
 
               resp = requests.get(
                   "https://www.bling.com.br/Api/v3/contas/receber",
@@ -103,7 +124,7 @@ jobs:
               )
 
               if resp.status_code != 200:
-                  print("❌ Erro ao buscar contas:", resp.text)
+                  print("❌ Erro:", resp.text)
                   break
 
               data = resp.json().get("data", [])
@@ -113,17 +134,17 @@ jobs:
 
               contas.extend(data)
               pagina += 1
-              time.sleep(0.5)
+              time.sleep(0.4)
 
           print(f"📊 {len(contas)} contas encontradas")
 
           # ===============================
-          # 🔽 BAIXAR CONTAS ATRASADAS
+          # 🔽 BAIXAR ATRASADAS
           # ===============================
-          print("🔄 Iniciando baixa automática...")
-
           hoje = datetime.now().date()
           baixadas = 0
+
+          print("🔄 Iniciando baixas...")
 
           for conta in contas:
               try:
@@ -131,45 +152,35 @@ jobs:
                   situacao = conta["situacao"]
                   vencimento = datetime.strptime(conta["dataVencimento"], "%Y-%m-%d").date()
 
-                  # 🔥 CORREÇÃO AQUI
                   if situacao in [2, 3] and vencimento < hoje:
 
                       print(f"⏰ ATRASADA: {id_conta}")
 
-                      for tentativa in range(3):
+                      resp = requests.post(
+                          f"https://www.bling.com.br/Api/v3/contas/receber/{id_conta}/baixar",
+                          headers={
+                              "Authorization": f"Bearer {access_token}",
+                              "Content-Type": "application/json"
+                          },
+                          json={
+                              "valor": conta.get("valor", 0),
+                              "data": str(hoje)
+                          }
+                      )
 
-                          resp = requests.post(
-                              f"https://www.bling.com.br/Api/v3/contas/receber/{id_conta}/baixar",
-                              headers={
-                                  "Authorization": f"Bearer {access_token}",
-                                  "Content-Type": "application/json"
-                              },
-                              json={
-                                  "valor": conta.get("valor", 0),
-                                  "data": str(hoje)
-                              }
-                          )
+                      if resp.status_code in [200, 204]:
+                          print(f"✅ Baixada: {id_conta}")
+                          baixadas += 1
+                      elif resp.status_code == 429:
+                          print("⏳ Rate limit...")
+                          time.sleep(2)
+                      else:
+                          print("❌ Erro:", resp.text)
 
-                          if resp.status_code in [200, 204]:
-                              print(f"✅ Baixada: {id_conta}")
-                              baixadas += 1
-                              break
-
-                          elif resp.status_code == 429:
-                              print("⏳ Rate limit, aguardando...")
-                              time.sleep(2)
-                              continue
-
-                          else:
-                              print("❌ Erro:", resp.text)
-                              break
-
-                          time.sleep(1)
-
-                      time.sleep(0.7)
+                      time.sleep(0.6)
 
               except Exception as e:
-                  print("❌ Erro geral:", str(e))
+                  print("❌ Erro:", str(e))
 
           print(f"🏁 FINALIZADO | {baixadas} contas baixadas")
 
