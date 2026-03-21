@@ -1,4 +1,4 @@
-name: Baixa automática Bling (ULTRA RESILIENTE)
+name: Baixa automática Bling (LIMPO)
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
 
       - run: pip install requests pynacl
 
-      - name: Executar robô blindado
+      - name: Executar robô
         env:
           CLIENT_ID: ${{ secrets.BLING_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.BLING_CLIENT_SECRET }}
@@ -30,6 +30,9 @@ jobs:
           from datetime import datetime
           from nacl import encoding, public
 
+          def log(msg):
+              print(msg, flush=True)
+
           CLIENT_ID = os.getenv("CLIENT_ID")
           CLIENT_SECRET = os.getenv("CLIENT_SECRET")
           REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
@@ -38,13 +41,11 @@ jobs:
 
           hoje = datetime.now().strftime("%Y-%m-%d")
 
-          def log(msg):
-              print(msg, flush=True)
-
           # =========================
           # TOKEN
           # =========================
           log("🔄 Atualizando token...")
+
           auth = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
 
           res = requests.post(
@@ -70,7 +71,7 @@ jobs:
           log("✅ Token OK")
 
           # =========================
-          # SALVAR REFRESH
+          # SALVAR NOVO REFRESH
           # =========================
           try:
               key = requests.get(
@@ -85,7 +86,10 @@ jobs:
               requests.put(
                   f"https://api.github.com/repos/{REPO}/actions/secrets/BLING_REFRESH_TOKEN",
                   headers={"Authorization": f"Bearer {GH_TOKEN}"},
-                  json={"encrypted_value": encrypted, "key_id": key["key_id"]}
+                  json={
+                      "encrypted_value": encrypted,
+                      "key_id": key["key_id"]
+                  }
               )
 
               log("🔐 Refresh atualizado")
@@ -93,60 +97,13 @@ jobs:
               log(f"⚠️ Falha ao salvar refresh: {e}")
 
           # =========================
-          # 🔍 BUSCAR CONTAS FINANCEIRAS (MULTI ENDPOINT)
-          # =========================
-          endpoints = [
-              "contas/caixas",
-              "contas",
-              "financeiro/contas"
-          ]
-
-          contas_fin = []
-
-          for ep in endpoints:
-              try:
-                  log(f"🔍 Tentando endpoint: {ep}")
-                  r = requests.get(
-                      f"https://www.bling.com.br/Api/v3/{ep}",
-                      headers={"Authorization": f"Bearer {access_token}"}
-                  )
-
-                  data = r.json()
-
-                  if data.get("data"):
-                      contas_fin = data["data"]
-                      log(f"✅ Encontrou contas em: {ep}")
-                      break
-
-              except Exception as e:
-                  log(f"⚠️ Erro endpoint {ep}: {e}")
-
-          if not contas_fin:
-              log("❌ Nenhuma conta financeira encontrada em nenhum endpoint")
-              exit()
-
-          # =========================
-          # ESCOLHER CONTA INTELIGENTE
-          # =========================
-          conta_id = None
-
-          for c in contas_fin:
-              nome = str(c.get("descricao", "")).lower()
-              if "mercado pago" in nome:
-                  conta_id = c["id"]
-                  break
-
-          if not conta_id:
-              conta_id = contas_fin[0]["id"]
-
-          log(f"🏦 Conta escolhida: {conta_id}")
-
-          # =========================
           # BUSCAR CONTAS A RECEBER
           # =========================
           contas = []
           page = 1
           MAX_PAGES = 100
+
+          log("🔍 Buscando contas...")
 
           while page <= MAX_PAGES:
               r = requests.get(
@@ -165,10 +122,10 @@ jobs:
               page += 1
               time.sleep(0.2)
 
-          log(f"📊 Total contas: {len(contas)}")
+          log(f"📊 Total: {len(contas)} contas")
 
           # =========================
-          # BAIXA
+          # BAIXAR CONTAS
           # =========================
           baixadas = 0
 
@@ -177,9 +134,11 @@ jobs:
                   situacao = str(c.get("situacao"))
                   venc = c.get("dataVencimento")
 
+                  # ✔ apenas abertas
                   if situacao != "1":
                       continue
 
+                  # ✔ apenas vencidas
                   if not venc or venc >= hoje:
                       continue
 
@@ -188,8 +147,7 @@ jobs:
 
                   payload = {
                       "valor": valor,
-                      "dataPagamento": hoje,
-                      "conta": {"id": conta_id}
+                      "dataPagamento": hoje
                   }
 
                   r = requests.post(
@@ -200,18 +158,18 @@ jobs:
 
                   if r.status_code in [200, 201]:
                       baixadas += 1
-                      log(f"✅ {idc}")
+                      log(f"✅ Baixado: {idc}")
 
                   elif "já foi baixada" in r.text:
                       continue
 
                   else:
-                      log(f"⚠️ {idc}: {r.text}")
+                      log(f"⚠️ Erro {idc}: {r.text}")
 
-                  time.sleep(0.2)
+                  time.sleep(0.15)
 
               except Exception as e:
                   log(f"⚠️ erro item: {e}")
 
-          log(f"🏁 FINAL: {baixadas} baixadas")
+          log(f"🏁 FINAL: {baixadas} contas baixadas")
           EOF
