@@ -27,6 +27,7 @@ jobs:
         run: |
           python - <<EOF
           import requests, base64, os, time
+          from nacl import encoding, public
 
           def log(msg):
               print(msg, flush=True)
@@ -34,8 +35,12 @@ jobs:
           CLIENT_ID = os.getenv("CLIENT_ID")
           CLIENT_SECRET = os.getenv("CLIENT_SECRET")
           REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
+          GH_TOKEN = os.getenv("GH_TOKEN")
+          REPO = os.getenv("REPO")
 
+          # =========================
           # TOKEN
+          # =========================
           auth = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
 
           res = requests.post(
@@ -54,10 +59,41 @@ jobs:
               log(f"❌ ERRO TOKEN: {res.text}")
               exit()
 
-          access_token = res.json()["access_token"]
+          data = res.json()
+          access_token = data["access_token"]
+          new_refresh = data["refresh_token"]
+
           log("✅ Token OK")
 
+          # =========================
+          # SALVAR NOVO REFRESH
+          # =========================
+          try:
+              key = requests.get(
+                  f"https://api.github.com/repos/{REPO}/actions/secrets/public-key",
+                  headers={"Authorization": f"Bearer {GH_TOKEN}"}
+              ).json()
+
+              pk = public.PublicKey(key["key"].encode(), encoding.Base64Encoder())
+              sealed = public.SealedBox(pk)
+              encrypted = base64.b64encode(sealed.encrypt(new_refresh.encode())).decode()
+
+              requests.put(
+                  f"https://api.github.com/repos/{REPO}/actions/secrets/BLING_REFRESH_TOKEN",
+                  headers={"Authorization": f"Bearer {GH_TOKEN}"},
+                  json={
+                      "encrypted_value": encrypted,
+                      "key_id": key["key_id"]
+                  }
+              )
+
+              log("🔐 Refresh atualizado")
+          except Exception as e:
+              log(f"⚠️ Falha ao salvar refresh: {e}")
+
+          # =========================
           # BUSCAR CONTAS (LIMITADO)
+          # =========================
           contas = []
           page = 1
           MAX_PAGES = 3
