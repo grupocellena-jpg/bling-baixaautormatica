@@ -35,9 +35,7 @@ jobs:
           CLIENT_SECRET = os.getenv("CLIENT_SECRET")
           REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
 
-          # =========================
           # TOKEN
-          # =========================
           auth = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
 
           res = requests.post(
@@ -59,15 +57,14 @@ jobs:
           access_token = res.json()["access_token"]
           log("✅ Token OK")
 
-          # =========================
-          # BUSCAR CONTAS
-          # =========================
+          # BUSCAR CONTAS (LIMITADO)
           contas = []
           page = 1
+          MAX_PAGES = 3
 
           log("🔍 Buscando contas...")
 
-          while True:
+          while page <= MAX_PAGES:
               r = requests.get(
                   f"https://www.bling.com.br/Api/v3/contas/receber?pagina={page}",
                   headers={"Authorization": f"Bearer {access_token}"}
@@ -79,17 +76,16 @@ jobs:
                   break
 
               contas.extend(data["data"])
+              log(f"📄 Página {page}")
               page += 1
               time.sleep(0.2)
 
-          log(f"📊 Total contas: {len(contas)}")
+          log(f"📊 Total contas encontradas: {len(contas)}")
 
-          # =========================
-          # IDENTIFICAR MARKETPLACE
-          # =========================
+          # DEBUG
           log("🧪 Verificando contas...")
 
-          for c in contas[:20]:  # só primeiras 20
+          for c in contas:
               log({
                   "id": c.get("id"),
                   "valor": c.get("valor"),
