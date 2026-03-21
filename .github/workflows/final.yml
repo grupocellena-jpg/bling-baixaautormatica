@@ -74,14 +74,13 @@ jobs:
               exit()
 
           data = res.json()
-
           access_token = data["access_token"]
           new_refresh = data["refresh_token"]
 
           print("✅ Token atualizado")
 
           # =========================
-          # 🔐 SALVAR REFRESH NO GITHUB
+          # 🔐 SALVAR REFRESH TOKEN
           # =========================
           print("🔄 Atualizando refresh_token no GitHub...")
 
@@ -114,14 +113,16 @@ jobs:
           print("STATUS GITHUB:", update_res.status_code)
 
           # =========================
-          # 📡 BUSCAR CONTAS
+          # 📡 BUSCAR CONTAS (SEM LOOP INFINITO)
           # =========================
           print("📡 Buscando contas...")
 
           contas = []
           page = 1
+          MAX_PAGES = 50
+          last_ids = set()
 
-          while True:
+          while page <= MAX_PAGES:
               url_contas = f"https://www.bling.com.br/Api/v3/contas/receber?pagina={page}"
 
               r = requests.get(
@@ -129,13 +130,29 @@ jobs:
                   headers={"Authorization": f"Bearer {access_token}"}
               )
 
+              if r.status_code != 200:
+                  print("⚠️ erro ao buscar página:", r.text)
+                  break
+
               data = r.json()
 
               if "data" not in data or not data["data"]:
+                  print("🚫 Sem mais dados")
                   break
 
-              contas.extend(data["data"])
-              print(f"📄 Página {page} carregada")
+              novos = data["data"]
+
+              # 🔒 proteção contra repetição infinita
+              ids_pagina = {c["id"] for c in novos}
+              if ids_pagina.issubset(last_ids):
+                  print("🚨 Página repetida detectada - encerrando")
+                  break
+
+              last_ids.update(ids_pagina)
+
+              print(f"📄 Página {page} OK ({len(novos)} registros)")
+
+              contas.extend(novos)
 
               page += 1
               time.sleep(0.4)
@@ -143,7 +160,7 @@ jobs:
           print(f"📊 {len(contas)} contas encontradas")
 
           # =========================
-          # 💰 BAIXA
+          # 💰 BAIXAR (COM RETRY E RATE LIMIT)
           # =========================
           print("🔄 Iniciando baixa...")
 
@@ -152,28 +169,39 @@ jobs:
           for c in contas:
               situacao = str(c.get("situacao", ""))
 
-              # 🔥 ajuste aqui se quiser filtrar melhor
+              # 🔥 ajuste aqui conforme Bling
               if situacao not in ["1", "2"]:
                   continue
 
               id_conta = c["id"]
               valor = c.get("valor", 0)
 
-              print(f"➡️ Baixando {id_conta} | R$ {valor}")
+              tentativas = 0
+              sucesso = False
 
-              r = requests.post(
-                  f"https://www.bling.com.br/Api/v3/contas/receber/{id_conta}/baixar",
-                  headers={"Authorization": f"Bearer {access_token}"},
-                  json={"valor": valor}
-              )
+              while tentativas < 3 and not sucesso:
+                  r = requests.post(
+                      f"https://www.bling.com.br/Api/v3/contas/receber/{id_conta}/baixar",
+                      headers={"Authorization": f"Bearer {access_token}"},
+                      json={"valor": valor}
+                  )
 
-              if r.status_code in [200, 201]:
-                  baixadas += 1
-                  print("✅ OK")
-              else:
-                  print("⚠️ ERRO:", r.text)
+                  if r.status_code in [200, 201]:
+                      baixadas += 1
+                      print(f"✅ {id_conta}")
+                      sucesso = True
 
-              time.sleep(0.5)
+                  elif r.status_code == 429:
+                      print("⏳ Rate limit, aguardando...")
+                      time.sleep(2)
+
+                  else:
+                      print(f"⚠️ {id_conta} ->", r.text)
+                      break
+
+                  tentativas += 1
+
+              time.sleep(0.4)
 
           print(f"🏁 FINALIZADO | {baixadas} contas baixadas")
           EOF
