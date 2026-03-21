@@ -1,4 +1,4 @@
-name: Baixa automática Bling (DEBUG FINAL)
+name: Baixa + Conciliação Bling (UNIFICADO)
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
 
       - run: pip install requests pynacl
 
-      - name: Executar robô
+      - name: Executar robô unificado
         env:
           CLIENT_ID: ${{ secrets.BLING_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.BLING_CLIENT_SECRET }}
@@ -71,31 +71,7 @@ jobs:
           log("✅ Token OK")
 
           # =========================
-          # 🔎 TESTE: BUSCAR PEDIDO POR numeroLoja
-          # =========================
-          log("🔎 Testando busca por numeroLoja...")
-
-          numero_loja = "2000015645601946"  # pode trocar depois
-
-          r = requests.get(
-              f"https://www.bling.com.br/Api/v3/pedidos/vendas?numeroLoja={numero_loja}",
-              headers={"Authorization": f"Bearer {access_token}"}
-          )
-
-          log(f"STATUS BUSCA PEDIDO: {r.status_code}")
-
-          try:
-              resp = r.json()
-              if resp.get("data"):
-                  log("✅ Pedido encontrado no Bling!")
-                  log(resp["data"][0])
-              else:
-                  log("⚠️ Nenhum pedido encontrado com esse numeroLoja")
-          except:
-              log(f"❌ Erro ao interpretar resposta: {r.text}")
-
-          # =========================
-          # SALVAR REFRESH
+          # SALVAR REFRESH (ÚNICO PONTO)
           # =========================
           try:
               key = requests.get(
@@ -125,7 +101,7 @@ jobs:
           # =========================
           contas = []
           page = 1
-          MAX_PAGES = 100
+          MAX_PAGES = 5
 
           log("🔍 Buscando contas...")
 
@@ -142,27 +118,26 @@ jobs:
 
               contas.extend(data["data"])
               log(f"📄 Página {page}")
-
               page += 1
               time.sleep(0.2)
 
-          log(f"📊 Total: {len(contas)} contas")
+          log(f"📊 Total contas: {len(contas)}")
 
           # =========================
-          # DEBUG REAL (AMOSTRA)
+          # 🔎 BLOCO DE CONCILIAÇÃO (BASE)
           # =========================
-          log("🧪 DEBUG PRIMEIRA CONTA:")
-          if contas:
-              c = contas[0]
+          log("🧠 Iniciando análise de contas (base conciliação)...")
+
+          for c in contas[:20]:
               log({
                   "id": c.get("id"),
-                  "situacao": c.get("situacao"),
-                  "dataVencimento": c.get("dataVencimento"),
-                  "valor": c.get("valor")
+                  "valor": c.get("valor"),
+                  "historico": c.get("historico"),
+                  "origem": c.get("origem")
               })
 
           # =========================
-          # BAIXAR (FILTRO FLEXÍVEL)
+          # BAIXAR CONTAS (SEU FLUXO ORIGINAL)
           # =========================
           baixadas = 0
 
@@ -192,7 +167,7 @@ jobs:
 
                   if r.status_code in [200, 201]:
                       baixadas += 1
-                      log(f"✅ {idc}")
+                      log(f"✅ Baixado {idc}")
 
                   elif "já foi baixada" in r.text:
                       continue
