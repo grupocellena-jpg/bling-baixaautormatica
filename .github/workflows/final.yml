@@ -1,7 +1,10 @@
-name: Baixa automática Bling (LIMPO)
+name: Baixa automática Bling (AUTO DIÁRIO)
 
 on:
   workflow_dispatch:
+
+  schedule:
+    - cron: "0 10 * * *"  # 07:00 Brasil
 
 jobs:
   baixar:
@@ -71,7 +74,7 @@ jobs:
           log("✅ Token OK")
 
           # =========================
-          # SALVAR NOVO REFRESH
+          # SALVAR REFRESH
           # =========================
           try:
               key = requests.get(
@@ -97,7 +100,7 @@ jobs:
               log(f"⚠️ Falha ao salvar refresh: {e}")
 
           # =========================
-          # BUSCAR CONTAS A RECEBER
+          # BUSCAR CONTAS
           # =========================
           contas = []
           page = 1
@@ -134,11 +137,9 @@ jobs:
                   situacao = str(c.get("situacao"))
                   venc = c.get("dataVencimento")
 
-                  # ✔ apenas abertas
                   if situacao != "1":
                       continue
 
-                  # ✔ apenas vencidas
                   if not venc or venc >= hoje:
                       continue
 
@@ -158,13 +159,13 @@ jobs:
 
                   if r.status_code in [200, 201]:
                       baixadas += 1
-                      log(f"✅ Baixado: {idc}")
+                      log(f"✅ {idc}")
 
                   elif "já foi baixada" in r.text:
                       continue
 
                   else:
-                      log(f"⚠️ Erro {idc}: {r.text}")
+                      log(f"⚠️ {idc}: {r.text}")
 
                   time.sleep(0.15)
 
