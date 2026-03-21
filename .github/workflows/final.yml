@@ -45,10 +45,8 @@ jobs:
 
           print("🔄 Atualizando token Bling...")
 
-          token_url = "https://www.bling.com.br/Api/v3/oauth/token"
-
           response = requests.post(
-              token_url,
+              "https://www.bling.com.br/Api/v3/oauth/token",
               data={
                   "grant_type": "refresh_token",
                   "refresh_token": REFRESH_TOKEN
@@ -107,7 +105,7 @@ jobs:
 
           contas = []
           page = 1
-          max_pages = 5  # evita loop infinito
+          max_pages = 10
 
           while page <= max_pages:
               print(f"📄 Buscando página {page}...")
@@ -142,7 +140,15 @@ jobs:
 
           for conta in contas:
               try:
-                  situacao = conta.get("situacao")
+                  # 🔥 CORREÇÃO AQUI
+                  situacao_raw = conta.get("situacao")
+                  print(f"DEBUG RAW situação: {situacao_raw}")
+
+                  if isinstance(situacao_raw, dict):
+                      situacao = situacao_raw.get("id")
+                  else:
+                      situacao = situacao_raw
+
                   data_venc = conta.get("dataVencimento")
 
                   if not situacao or not data_venc:
