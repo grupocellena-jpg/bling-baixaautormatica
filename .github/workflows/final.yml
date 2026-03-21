@@ -42,18 +42,19 @@ jobs:
           REPO = os.getenv("REPO")
 
           # ===============================
-          # 🔄 TOKEN
+          # 🔄 ATUALIZAR TOKEN (CORREÇÃO AQUI)
           # ===============================
           print("🔄 Atualizando token...")
 
           response = requests.post(
               "https://www.bling.com.br/Api/v3/oauth/token",
-              data={
+              json={
                   "grant_type": "refresh_token",
                   "refresh_token": REFRESH_TOKEN,
                   "client_id": CLIENT_ID,
                   "client_secret": CLIENT_SECRET
               },
+              headers={"Content-Type": "application/json"},
               timeout=10
           )
 
@@ -67,12 +68,12 @@ jobs:
           access_token = token_data["access_token"]
           new_refresh_token = token_data["refresh_token"]
 
-          print("✅ Token OK")
+          print("✅ Token atualizado")
 
           # ===============================
-          # 🔐 SALVAR REFRESH NO GITHUB
+          # 🔐 ATUALIZAR REFRESH TOKEN NO GITHUB
           # ===============================
-          print("🔐 Salvando novo refresh_token...")
+          print("🔐 Atualizando refresh_token no GitHub...")
 
           headers = {
               "Authorization": f"token {GH_TOKEN}",
@@ -108,7 +109,7 @@ jobs:
               timeout=10
           )
 
-          print("✅ Refresh salvo com sucesso")
+          print("✅ Refresh token salvo automaticamente")
 
           # ===============================
           # 🔎 BUSCAR CONTAS
@@ -127,7 +128,7 @@ jobs:
               )
 
               if resp.status_code != 200:
-                  print("❌ Erro ao buscar:", resp.text)
+                  print("❌ Erro ao buscar contas:", resp.text)
                   break
 
               data = resp.json().get("data", [])
@@ -136,7 +137,7 @@ jobs:
                   break
 
               contas.extend(data)
-              print(f"📄 Página {pagina} OK ({len(data)})")
+              print(f"📄 Página {pagina} ({len(data)})")
 
               pagina += 1
               time.sleep(0.4)
@@ -157,13 +158,11 @@ jobs:
                   situacao = conta["situacao"]
 
                   data_venc = conta.get("dataVencimento") or conta.get("vencimento")
-
                   if not data_venc:
                       continue
 
                   vencimento = datetime.strptime(data_venc, "%Y-%m-%d").date()
 
-                  # 🔥 CORREÇÃO FINAL
                   if situacao in [2, 3] and vencimento < hoje:
 
                       print(f"⏰ ATRASADA: {id_conta}")
@@ -205,6 +204,6 @@ jobs:
               except Exception as e:
                   print("❌ Erro:", str(e))
 
-          print(f"🏁 FINALIZADO | {baixadas} baixadas")
+          print(f"🏁 FINALIZADO | {baixadas} contas baixadas")
 
           EOF
