@@ -71,6 +71,30 @@ jobs:
           log("✅ Token OK")
 
           # =========================
+          # 🔎 TESTE: BUSCAR PEDIDO POR numeroLoja
+          # =========================
+          log("🔎 Testando busca por numeroLoja...")
+
+          numero_loja = "2000015645601946"  # <-- pode trocar depois
+
+          r = requests.get(
+              f"https://api.bling.com.br/Api/v3/pedidos/vendas?numeroLoja={numero_loja}",
+              headers={"Authorization": f"Bearer {access_token}"}
+          )
+
+          log(f"STATUS BUSCA PEDIDO: {r.status_code}")
+
+          try:
+              resp = r.json()
+              if resp.get("data"):
+                  log("✅ Pedido encontrado no Bling!")
+                  log(resp["data"][0])  # mostra o primeiro
+              else:
+                  log("⚠️ Nenhum pedido encontrado com esse numeroLoja")
+          except:
+              log(f"❌ Erro ao interpretar resposta: {r.text}")
+
+          # =========================
           # SALVAR REFRESH
           # =========================
           try:
@@ -146,7 +170,6 @@ jobs:
               try:
                   venc = c.get("dataVencimento")
 
-                  # 🔥 foco apenas na data (mais confiável)
                   if not venc:
                       continue
 
