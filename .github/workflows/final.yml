@@ -75,10 +75,10 @@ jobs:
           # =========================
           log("🔎 Testando busca por numeroLoja...")
 
-          numero_loja = "2000015645601946"  # <-- pode trocar depois
+          numero_loja = "2000015645601946"  # pode trocar depois
 
           r = requests.get(
-              f"https://api.bling.com.br/Api/v3/pedidos/vendas?numeroLoja={numero_loja}",
+              f"https://www.bling.com.br/Api/v3/pedidos/vendas?numeroLoja={numero_loja}",
               headers={"Authorization": f"Bearer {access_token}"}
           )
 
@@ -88,7 +88,7 @@ jobs:
               resp = r.json()
               if resp.get("data"):
                   log("✅ Pedido encontrado no Bling!")
-                  log(resp["data"][0])  # mostra o primeiro
+                  log(resp["data"][0])
               else:
                   log("⚠️ Nenhum pedido encontrado com esse numeroLoja")
           except:
