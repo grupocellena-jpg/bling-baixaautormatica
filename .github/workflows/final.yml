@@ -1,4 +1,4 @@
-name: Baixa + Conciliação Bling (UNIFICADO)
+name: Baixa automática Bling (DEBUG FINAL)
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
 
       - run: pip install requests pynacl
 
-      - name: Executar robô unificado
+      - name: Executar robô
         env:
           CLIENT_ID: ${{ secrets.BLING_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.BLING_CLIENT_SECRET }}
@@ -71,7 +71,7 @@ jobs:
           log("✅ Token OK")
 
           # =========================
-          # SALVAR REFRESH (ÚNICO PONTO)
+          # SALVAR REFRESH
           # =========================
           try:
               key = requests.get(
@@ -101,7 +101,7 @@ jobs:
           # =========================
           contas = []
           page = 1
-          MAX_PAGES = 5
+          MAX_PAGES = 100
 
           log("🔍 Buscando contas...")
 
@@ -118,26 +118,27 @@ jobs:
 
               contas.extend(data["data"])
               log(f"📄 Página {page}")
+
               page += 1
               time.sleep(0.2)
 
-          log(f"📊 Total contas: {len(contas)}")
+          log(f"📊 Total: {len(contas)} contas")
 
           # =========================
-          # 🔎 BLOCO DE CONCILIAÇÃO (BASE)
+          # DEBUG REAL (AMOSTRA)
           # =========================
-          log("🧠 Iniciando análise de contas (base conciliação)...")
-
-          for c in contas[:20]:
+          log("🧪 DEBUG PRIMEIRA CONTA:")
+          if contas:
+              c = contas[0]
               log({
                   "id": c.get("id"),
-                  "valor": c.get("valor"),
-                  "historico": c.get("historico"),
-                  "origem": c.get("origem")
+                  "situacao": c.get("situacao"),
+                  "dataVencimento": c.get("dataVencimento"),
+                  "valor": c.get("valor")
               })
 
           # =========================
-          # BAIXAR CONTAS (SEU FLUXO ORIGINAL)
+          # BAIXAR (FILTRO FLEXÍVEL)
           # =========================
           baixadas = 0
 
@@ -145,6 +146,7 @@ jobs:
               try:
                   venc = c.get("dataVencimento")
 
+                  # 🔥 foco apenas na data (mais confiável)
                   if not venc:
                       continue
 
@@ -167,7 +169,7 @@ jobs:
 
                   if r.status_code in [200, 201]:
                       baixadas += 1
-                      log(f"✅ Baixado {idc}")
+                      log(f"✅ {idc}")
 
                   elif "já foi baixada" in r.text:
                       continue
