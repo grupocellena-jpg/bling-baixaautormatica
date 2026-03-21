@@ -46,12 +46,17 @@ jobs:
           print("🔄 Atualizando token Bling...")
 
           token_url = "https://www.bling.com.br/Api/v3/oauth/token"
-          payload = {
-              "grant_type": "refresh_token",
-              "refresh_token": REFRESH_TOKEN
-          }
 
-          response = requests.post(token_url, data=payload, auth=(CLIENT_ID, CLIENT_SECRET))
+          response = requests.post(
+              token_url,
+              data={
+                  "grant_type": "refresh_token",
+                  "refresh_token": REFRESH_TOKEN
+              },
+              auth=(CLIENT_ID, CLIENT_SECRET),
+              timeout=10
+          )
+
           token_data = response.json()
 
           if "access_token" not in token_data:
@@ -63,7 +68,7 @@ jobs:
 
           print("✅ Token atualizado")
 
-          # 🔐 Atualizar refresh_token no GitHub
+          # 🔐 Atualizar refresh token no GitHub
           print("🔄 Atualizando refresh_token no GitHub...")
 
           headers_github = {
@@ -73,13 +78,13 @@ jobs:
 
           pk_resp = requests.get(
               f"https://api.github.com/repos/{REPO}/actions/secrets/public-key",
-              headers=headers_github
+              headers=headers_github,
+              timeout=10
           ).json()
 
           public_key = public.PublicKey(pk_resp["key"].encode(), encoding.Base64Encoder())
           sealed_box = public.SealedBox(public_key)
           encrypted = sealed_box.encrypt(new_refresh_token.encode())
-
           encrypted_value = b64encode(encrypted).decode()
 
           requests.put(
@@ -88,7 +93,8 @@ jobs:
               json={
                   "encrypted_value": encrypted_value,
                   "key_id": pk_resp["key_id"]
-              }
+              },
+              timeout=10
           )
 
           print("✅ Refresh token atualizado no GitHub")
@@ -101,20 +107,31 @@ jobs:
 
           contas = []
           page = 1
+          max_pages = 5  # evita loop infinito
 
-          while True:
+          while page <= max_pages:
+              print(f"📄 Buscando página {page}...")
+
               resp = requests.get(
                   f"https://www.bling.com.br/Api/v3/contas/receber?page={page}",
-                  headers=headers
+                  headers=headers,
+                  timeout=10
               )
 
               data = resp.json()
 
               if "data" not in data or not data["data"]:
+                  print("🚫 Sem mais dados")
                   break
 
               contas.extend(data["data"])
+
+              if len(data["data"]) < 100:
+                  print("✅ Última página")
+                  break
+
               page += 1
+              time.sleep(0.4)
 
           print(f"📊 {len(contas)} contas encontradas")
 
@@ -135,7 +152,6 @@ jobs:
 
                   print(f"🔍 ID {conta['id']} | Situação: {situacao} | Venc: {data_venc}")
 
-                  # 🎯 FILTRO CORRETO
                   if situacao == 1 and vencimento < hoje:
 
                       print(f"⏰ ATRASADA REAL: {conta['id']}")
@@ -144,7 +160,7 @@ jobs:
 
                       tentativa = 0
                       while tentativa < 3:
-                          r = requests.post(url, headers=headers)
+                          r = requests.post(url, headers=headers, timeout=10)
 
                           if r.status_code == 204:
                               print(f"✅ Baixada: {conta['id']}")
@@ -168,7 +184,7 @@ jobs:
                       time.sleep(0.4)
 
               except Exception as e:
-                  print(f"Erro na conta {conta.get('id')}: {e}")
+                  print(f"❌ Erro na conta {conta.get('id')}: {e}")
 
           print(f"🏁 FINALIZADO | {baixadas} contas baixadas")
           EOF
