@@ -14,20 +14,17 @@ jobs:
         with:
           python-version: 3.11
 
-      - run: pip install requests pynacl
+      - run: pip install requests
 
       - name: Executar conciliação
         env:
           CLIENT_ID: ${{ secrets.BLING_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.BLING_CLIENT_SECRET }}
           REFRESH_TOKEN: ${{ secrets.BLING_REFRESH_TOKEN }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          REPO: ${{ github.repository }}
 
         run: |
           python - <<EOF
           import requests, base64, os, time
-          from nacl import encoding, public
 
           def log(msg):
               print(msg, flush=True)
@@ -35,11 +32,9 @@ jobs:
           CLIENT_ID = os.getenv("CLIENT_ID")
           CLIENT_SECRET = os.getenv("CLIENT_SECRET")
           REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
-          GH_TOKEN = os.getenv("GH_TOKEN")
-          REPO = os.getenv("REPO")
 
           # =========================
-          # TOKEN
+          # TOKEN (SEM ATUALIZAR REFRESH)
           # =========================
           auth = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
 
@@ -59,37 +54,9 @@ jobs:
               log(f"❌ ERRO TOKEN: {res.text}")
               exit()
 
-          data = res.json()
-          access_token = data["access_token"]
-          new_refresh = data["refresh_token"]
+          access_token = res.json()["access_token"]
 
-          log("✅ Token OK")
-
-          # =========================
-          # SALVAR NOVO REFRESH
-          # =========================
-          try:
-              key = requests.get(
-                  f"https://api.github.com/repos/{REPO}/actions/secrets/public-key",
-                  headers={"Authorization": f"Bearer {GH_TOKEN}"}
-              ).json()
-
-              pk = public.PublicKey(key["key"].encode(), encoding.Base64Encoder())
-              sealed = public.SealedBox(pk)
-              encrypted = base64.b64encode(sealed.encrypt(new_refresh.encode())).decode()
-
-              requests.put(
-                  f"https://api.github.com/repos/{REPO}/actions/secrets/BLING_REFRESH_TOKEN",
-                  headers={"Authorization": f"Bearer {GH_TOKEN}"},
-                  json={
-                      "encrypted_value": encrypted,
-                      "key_id": key["key_id"]
-                  }
-              )
-
-              log("🔐 Refresh atualizado")
-          except Exception as e:
-              log(f"⚠️ Falha ao salvar refresh: {e}")
+          log("✅ Token OK (sem atualizar refresh)")
 
           # =========================
           # BUSCAR CONTAS (LIMITADO)
